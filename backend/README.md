@@ -41,9 +41,9 @@ VITE_PHP_API_URL=/backend/api
 # Baz Done MySQL
 DB_HOST=localhost
 DB_PORT=3306
-DB_NAME=u123456789_upmizik
-DB_USER=u123456789_upmizik_user
-DB_PASS=VotreMotDePasseSekirize509@
+DB_NAME=non_baz_done_ou_a
+DB_USER=non_itilizate_baz_done_ou_a
+DB_PASS=Mete_Yon_Modpas_Solid_Isit_La
 
 # Anviwònman & Domèn
 APP_ENV=production
@@ -52,7 +52,7 @@ ALLOWED_ORIGINS=https://upmizik.com,https://www.upmizik.com
 
 # Administratè Master
 ADMIN_EMAIL=admin@upmizik.com
-ADMIN_SECRET=AdminUpMizik2026Secure!
+ADMIN_SECRET=Mete_Yon_Sekre_Admin_Solid_Isit_La
 
 # MonCash Gateway (Opsyonèl pou kòmanse)
 MONCASH_CLIENT_ID=

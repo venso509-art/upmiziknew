@@ -71,10 +71,10 @@ Ouvri fichye `backend/config/db.php` epi mete vrè enfòmasyon baz done ou te kr
 
 ```php
 define('DB_HOST', 'localhost'); // Sou Hostinger, li toujou 'localhost'
-define('DB_NAME', 'u123456789_upmizik'); // Mete non baz done ou a
-define('DB_USER', 'u123456789_upmizik_user'); // Mete non itilizatè baz done ou a
-define('DB_PASS', 'UpMizik509@Hostinger2026'); // Mete modpas ou a
-define('SITE_URL', 'https://domèn-ou-an.com'); // Mete non domèn sit ou a
+define('DB_NAME', 'non_baz_done_ou_a'); // Mete non baz done ou a
+define('DB_USER', 'non_itilizate_baz_done_ou_a'); // Mete non itilizatè baz done ou a
+define('DB_PASS', 'Modpas_Sekirize_Ou_A'); // Mete modpas ou a
+define('SITE_URL', 'https://upmizik.com'); // Mete non domèn sit ou a
 ```
 
 ---

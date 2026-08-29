@@ -7,9 +7,9 @@ require_once __DIR__ . '/env.php';
 
 define('DB_HOST', env('DB_HOST', 'localhost'));
 define('DB_PORT', env('DB_PORT', '3306'));
-define('DB_NAME', env('DB_NAME', 'u123456789_upmizik'));
-define('DB_USER', env('DB_USER', 'u123456789_upmizik_user'));
-define('DB_PASS', env('DB_PASS', 'VotreMotDePasseSekirize509@'));
+define('DB_NAME', env('DB_NAME', ''));
+define('DB_USER', env('DB_USER', ''));
+define('DB_PASS', env('DB_PASS', ''));
 define('SITE_URL', rtrim(env('SITE_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . ($_SERVER['HTTP_HOST'] ?? 'localhost')), '/'));
 
 if (!function_exists('getDBConnection')) {

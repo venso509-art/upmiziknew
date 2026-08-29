@@ -12,9 +12,9 @@ if (session_status() === PHP_SESSION_NONE) {
 // ----------------------------------------------------------
 // Ranplase enfòmasyon sa yo ak sa ou kreye nan Hostinger hPanel > Databases
 define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
-define('DB_NAME', getenv('DB_NAME') ?: 'u123456789_upmizik');
-define('DB_USER', getenv('DB_USER') ?: 'u123456789_upmizik_user');
-define('DB_PASS', getenv('DB_PASS') ?: 'VotreMotDePasseSekirize509@');
+define('DB_NAME', getenv('DB_NAME') ?: '');
+define('DB_USER', getenv('DB_USER') ?: '');
+define('DB_PASS', getenv('DB_PASS') ?: '');
 
 // URL Sit la sou Hostinger (egz: https://upmizik.com)
 define('SITE_URL', getenv('SITE_URL') ?: ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . ($_SERVER['HTTP_HOST'] ?? 'localhost')));
