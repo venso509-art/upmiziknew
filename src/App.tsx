@@ -46,6 +46,7 @@ import { offlineManager } from './utils/offlineManager';
 import { OfflinePlaylistModal } from './components/OfflinePlaylistModal';
 import { ArtistStoryBar } from './components/ArtistStoryBar';
 import { MobileBottomNav } from './components/MobileBottomNav';
+import { FontSelectorModal, FONT_OPTIONS } from './components/FontSelectorModal';
 
 export default function App() {
   // Navigation & View state
@@ -110,6 +111,26 @@ export default function App() {
 
   // Recommendations refresh tracker
   const [recRefreshKey, setRecRefreshKey] = useState(0);
+
+  // Global Font Style Selection (1 to 6)
+  const [selectedFontId, setSelectedFontId] = useState<number>(() => {
+    const saved = localStorage.getItem('upmizik_font_id');
+    return saved ? parseInt(saved, 10) : 1;
+  });
+  const [showFontModal, setShowFontModal] = useState(false);
+
+  // Apply selected font to body and document root
+  useEffect(() => {
+    const found = FONT_OPTIONS.find((f) => f.id === selectedFontId) || FONT_OPTIONS[0];
+    document.body.style.fontFamily = found.fontFamilyCSS;
+    localStorage.setItem('upmizik_font_id', selectedFontId.toString());
+  }, [selectedFontId]);
+
+  const handleSelectFont = (font: typeof FONT_OPTIONS[0]) => {
+    setSelectedFontId(font.id);
+    document.body.style.fontFamily = font.fontFamilyCSS;
+    addToast('success', `✨ Stil ekriti #${font.id} "${font.name}" aplike avèk siksè!`);
+  };
 
   // Global Theme Mode (Atmospheric Night vs High Contrast Light)
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => StorageService.getThemeMode());
@@ -1235,6 +1256,7 @@ export default function App() {
         onToggleTheme={handleToggleTheme}
         onOpenOfflineModal={() => handleOpenOfflineModal('playlists')}
         offlineTracksCount={cachedTrackIds.length}
+        onOpenFontSelector={() => setShowFontModal(true)}
       />
 
       {/* Offline & Intermittent Connectivity Banner */}
@@ -1629,6 +1651,14 @@ export default function App() {
         onPlayPlaylist={handlePlayPlaylist}
         onToast={addToast}
         initialTab={offlineModalInitialTab}
+      />
+
+      {/* MODAL 8: VISUAL FONT STYLE SELECTOR */}
+      <FontSelectorModal
+        isOpen={showFontModal}
+        onClose={() => setShowFontModal(false)}
+        onSelectFont={handleSelectFont}
+        currentFontId={selectedFontId}
       />
 
     </div>

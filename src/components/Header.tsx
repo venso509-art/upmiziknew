@@ -42,6 +42,7 @@ interface HeaderProps {
   onToggleTheme: () => void;
   onOpenOfflineModal?: () => void;
   offlineTracksCount?: number;
+  onOpenFontSelector?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -67,7 +68,8 @@ export const Header: React.FC<HeaderProps> = ({
   themeMode,
   onToggleTheme,
   onOpenOfflineModal,
-  offlineTracksCount = 0
+  offlineTracksCount = 0,
+  onOpenFontSelector
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -232,6 +234,20 @@ export const Header: React.FC<HeaderProps> = ({
                 </>
               )}
             </button>
+
+            {/* Font Style Selector Button (Desktop) */}
+            {onOpenFontSelector && (
+              <button
+                id="header-font-selector-btn"
+                type="button"
+                onClick={onOpenFontSelector}
+                title="Chanje Stil Ekriti (6 Fòm Polis)"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-[#0d1424] hover:bg-[#162038] text-amber-400 border border-amber-500/30 hover:border-amber-400 shadow-sm transition-all"
+              >
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span className="hidden xl:inline">Ekriti</span>
+              </button>
+            )}
 
             {/* Espas Atis Button */}
             {currentArtist ? (
@@ -450,6 +466,21 @@ export const Header: React.FC<HeaderProps> = ({
                     {offlineTracksCount}
                   </span>
                 )}
+              </button>
+            )}
+
+            {/* Mobile Font Style Selector Button */}
+            {onOpenFontSelector && (
+              <button
+                id="mobile-drawer-font-selector-btn"
+                onClick={() => {
+                  onOpenFontSelector();
+                  setMobileMenuOpen(false);
+                }}
+                className="flex items-center justify-center gap-2 p-2.5 rounded-xl text-sm font-medium bg-[#0d1424] text-amber-400 border border-amber-500/30"
+              >
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span>Stil Ekriti</span>
               </button>
             )}
 
