@@ -1,246 +1,240 @@
 <?php
 /**
- * UpMizik - Artists API Endpoint (Hostinger / MySQL)
+ * UpMizik - Artists API Endpoint (Hostinger / MySQL / PDO)
  */
 
-require_once __DIR__ . '/../config/db.php';
+require_once dirname(__DIR__) . '/middleware/cors.php';
+require_once dirname(__DIR__) . '/config/database.php';
 
 $pdo = getDBConnection();
 $method = $_SERVER['REQUEST_METHOD'];
 
 // ----------------------------------------------------------
-// GET: Rekipere tout atis oswa yon sèl atis
+// GET: Lis Atis oswa Pwofil Atis
 // ----------------------------------------------------------
 if ($method === 'GET') {
     $id = $_GET['id'] ?? null;
-    $email = $_GET['email'] ?? null;
     $status = $_GET['status'] ?? null;
 
     if ($id) {
         $stmt = $pdo->prepare("SELECT * FROM artists WHERE id = ?");
         $stmt->execute([$id]);
         $artist = $stmt->fetch();
+
         if ($artist) {
-            $artist['isPaidThisMonth'] = (bool)$artist['isPaidThisMonth'];
-            jsonResponse(['success' => true, 'artist' => $artist]);
+            unset($artist['pin']);
+            $artist['isPaidThisMonth'] = (bool)($artist['isPaidThisMonth'] ?? false);
+
+            // Rekipere tout mizik atis la
+            $mStmt = $pdo->prepare("SELECT * FROM musics WHERE artistId = ? ORDER BY created_at DESC");
+            $mStmt->execute([$id]);
+            $artist['musics'] = $mStmt->fetchAll();
+
+            jsonResponse([
+                'success' => true,
+                'message' => 'Pwofil atis la rekipere.',
+                'data' => ['artist' => $artist],
+                'artist' => $artist,
+                'errors' => []
+            ]);
         } else {
-            jsonResponse(['success' => false, 'message' => 'Atis la pa jwenn.'], 404);
-        }
-    } elseif ($email) {
-        $stmt = $pdo->prepare("SELECT * FROM artists WHERE email = ?");
-        $stmt->execute([$email]);
-        $artist = $stmt->fetch();
-        if ($artist) {
-            $artist['isPaidThisMonth'] = (bool)$artist['isPaidThisMonth'];
-            jsonResponse(['success' => true, 'artist' => $artist]);
-        } else {
-            jsonResponse(['success' => false, 'message' => 'Atis la pa jwenn.'], 404);
+            jsonResponse([
+                'success' => false,
+                'message' => 'Atis la pa jwenn nan baz done a.',
+                'data' => null,
+                'errors' => ['Artist not found']
+            ], 404);
         }
     } else {
-        $query = "SELECT * FROM artists";
+        $query = "SELECT * FROM artists WHERE 1=1";
         $params = [];
-        if ($status && in_array($status, ['pending', 'active', 'rejected', 'suspended'])) {
-            $query .= " WHERE status = ?";
+
+        if ($status && $status !== 'all') {
+            $query .= " AND status = ?";
             $params[] = $status;
         }
-        $query .= " ORDER BY registrationDate DESC";
+
+        $query .= " ORDER BY totalListens DESC, registrationDate DESC";
         $stmt = $pdo->prepare($query);
         $stmt->execute($params);
         $artists = $stmt->fetchAll();
-        
+
         foreach ($artists as &$a) {
-            $a['isPaidThisMonth'] = (bool)$a['isPaidThisMonth'];
-        }
-        jsonResponse(['success' => true, 'artists' => $artists, 'count' => count($artists)]);
-    }
-}
-
-// ----------------------------------------------------------
-// POST: Enskripsyon Nouvo Atis (Status: 'pending' pa defo)
-// ----------------------------------------------------------
-if ($method === 'POST') {
-    $data = getJsonInput();
-    if (empty($data['email']) || empty($data['stageName'])) {
-        jsonResponse(['success' => false, 'message' => 'Non sèn ak Imèl obligatwa.'], 400);
-    }
-
-    // Tcheke si imèl la deja anrejistre
-    $check = $pdo->prepare("SELECT id FROM artists WHERE email = ?");
-    $check->execute([$data['email']]);
-    if ($check->fetch()) {
-        jsonResponse(['success' => false, 'message' => 'Imèl sa a deja itilize pa yon lòt atis.'], 409);
-    }
-
-    $id = !empty($data['id']) ? $data['id'] : 'art_' . time() . '_' . bin2hex(random_bytes(3));
-    $name = $data['name'] ?? $data['stageName'];
-    $stageName = $data['stageName'];
-    $email = strtolower(trim($data['email']));
-    $phone = $data['phone'] ?? '';
-    $city = $data['city'] ?? 'Pòtoprens';
-    $pin = $data['pin'] ?? '0000';
-    $avatarUrl = $data['avatarUrl'] ?? 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80';
-    $bio = $data['bio'] ?? '';
-    $musicalRoots = $data['musicalRoots'] ?? '';
-    $musicalInfluences = $data['musicalInfluences'] ?? '';
-    $artisticVision = $data['artisticVision'] ?? '';
-    $artistQuote = $data['artistQuote'] ?? '';
-    $status = $data['status'] ?? 'pending';
-    $registrationProofUrl = $data['registrationProofUrl'] ?? '';
-    $registrationDate = $data['registrationDate'] ?? date('Y-m-d H:i:s');
-    $headerBannerUrl = $data['headerBannerUrl'] ?? '';
-    $bannerGenreTheme = $data['bannerGenreTheme'] ?? '';
-
-    $stmt = $pdo->prepare("
-        INSERT INTO artists (
-            id, name, stageName, email, phone, city, pin, avatarUrl, bio,
-            musicalRoots, musicalInfluences, artisticVision, artistQuote,
-            status, registrationProofUrl, registrationDate, headerBannerUrl, bannerGenreTheme
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ");
-
-    $stmt->execute([
-        $id, $name, $stageName, $email, $phone, $city, $pin, $avatarUrl, $bio,
-        $musicalRoots, $musicalInfluences, $artisticVision, $artistQuote,
-        $status, $registrationProofUrl, $registrationDate, $headerBannerUrl, $bannerGenreTheme
-    ]);
-
-    // Kreye yon notifikasyon bwat mesaj pou atis la
-    $inboxStmt = $pdo->prepare("
-        INSERT INTO artist_inbox (
-            id, artistId, artistName, artistEmail, type, subject,
-            senderName, senderEmail, recipientEmail, previewText, bodyText, isRead
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-    ");
-    $inboxId = 'msg_' . time() . '_' . bin2hex(random_bytes(3));
-    $inboxStmt->execute([
-        $inboxId,
-        $id,
-        $stageName,
-        $email,
-        'registration_received',
-        'Dosye Enskripsyon Atis UpMizik Resevwa',
-        'Ekip UpMizik',
-        'noreply@upmizik.com',
-        $email,
-        'Nou resevwa dosye w la epi n ap valide prèv peman $4.99 la...',
-        "Bonjou $stageName,\n\nNou byen resevwa fòmilè enskripsyon w sou platfòm UpMizik la. Ekip administrasyon nou an ap verifye prèv transfè w la. Kont ou ap aktive nan kèk minit."
-    ]);
-
-    jsonResponse([
-        'success' => true,
-        'message' => 'Enskripsyon anrejistre avèk siksè sou sèvè a.',
-        'artistId' => $id,
-        'status' => $status
-    ], 201);
-}
-
-// ----------------------------------------------------------
-// PUT: Modifikasyon Atis / Validasyon / Refi pa Admin
-// ----------------------------------------------------------
-if ($method === 'PUT') {
-    $data = getJsonInput();
-    $id = $data['id'] ?? $_GET['id'] ?? null;
-
-    if (!$id) {
-        jsonResponse(['success' => false, 'message' => 'ID atis la obligatwa.'], 400);
-    }
-
-    // 1. Tcheke si se yon aksyon validasyon / refi pa admin
-    if (isset($data['status'])) {
-        $newStatus = $data['status']; // 'active' | 'rejected' | 'suspended' | 'pending'
-        $rejectionReason = $data['registrationRejectionReason'] ?? $data['reason'] ?? null;
-        $suspendedUntil = $data['suspendedUntil'] ?? null;
-        $suspensionDays = $data['suspensionDays'] ?? null;
-        $suspensionReason = $data['suspensionReason'] ?? null;
-
-        $stmt = $pdo->prepare("
-            UPDATE artists SET 
-                status = ?,
-                registrationRejectionReason = ?,
-                suspendedUntil = ?,
-                suspensionDays = ?,
-                suspensionReason = ?
-            WHERE id = ?
-        ");
-        $stmt->execute([$newStatus, $rejectionReason, $suspendedUntil, $suspensionDays, $suspensionReason, $id]);
-
-        // Si atis la valide, voye notifikasyon nan bwat li
-        if ($newStatus === 'active') {
-            $artistStmt = $pdo->prepare("SELECT * FROM artists WHERE id = ?");
-            $artistStmt->execute([$id]);
-            $art = $artistStmt->fetch();
-
-            if ($art) {
-                $inboxId = 'msg_val_' . time() . '_' . bin2hex(random_bytes(3));
-                $inboxStmt = $pdo->prepare("
-                    INSERT INTO artist_inbox (
-                        id, artistId, artistName, artistEmail, type, subject,
-                        senderName, senderEmail, recipientEmail, previewText, bodyText, isRead
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-                ");
-                $inboxStmt->execute([
-                    $inboxId,
-                    $id,
-                    $art['stageName'],
-                    $art['email'],
-                    'account_verified',
-                    'Felisitasyon! Kont Atis UpMizik ou a Valide!',
-                    'Administrasyon UpMizik',
-                    'admin@upmizik.com',
-                    $art['email'],
-                    'Kont ou aksepte ofisyèlman. Ou ka pibliye mizik ou kounye a.',
-                    "Bonjou {$art['stageName']},\n\nNou kontan enfòme w ke prèv peman w lan valide epi kont atis ou a aktif nèt sou UpMizik. Kòmanse pibliye track ou yo epi resevwa donasyon dirèkteman."
-                ]);
-            }
+            unset($a['pin']);
+            $a['isPaidThisMonth'] = (bool)($a['isPaidThisMonth'] ?? false);
         }
 
         jsonResponse([
             'success' => true,
-            'message' => 'Estati atis la aktyalize ak siksè.',
-            'artistId' => $id,
-            'status' => $newStatus
+            'message' => 'Lis atis rekipere.',
+            'data' => ['artists' => $artists, 'count' => count($artists)],
+            'artists' => $artists,
+            'count' => count($artists),
+            'errors' => []
         ]);
     }
+}
 
-    // 2. Modifikasyon jeneral pwofil atis la
-    $allowedFields = [
-        'name', 'stageName', 'phone', 'city', 'pin', 'avatarUrl', 'bio',
+// ----------------------------------------------------------
+// POST: Enskri yon nouvo atis
+// ----------------------------------------------------------
+if ($method === 'POST') {
+    $data = getJsonInput();
+
+    if (empty($data['name']) || empty($data['stageName']) || empty($data['email']) || empty($data['phone'])) {
+        jsonResponse([
+            'success' => false,
+            'message' => 'Non, Non Sèn, Imèl ak Nimewo Telefòn obligatwa.',
+            'data' => null,
+            'errors' => ['Missing required artist fields']
+        ], 400);
+    }
+
+    $id = !empty($data['id']) ? $data['id'] : 'art_' . time() . '_' . bin2hex(random_bytes(3));
+    $name = trim($data['name']);
+    $stageName = trim($data['stageName']);
+    $email = strtolower(trim($data['email']));
+    $phone = trim($data['phone']);
+    $city = $data['city'] ?? 'Pòtoprens';
+    $pin = !empty($data['pin']) ? (strlen($data['pin']) === 60 ? $data['pin'] : password_hash($data['pin'], PASSWORD_BCRYPT, ['cost' => 10])) : password_hash('0000', PASSWORD_BCRYPT, ['cost' => 10]);
+    $avatarUrl = $data['avatarUrl'] ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80';
+    $bio = $data['bio'] ?? null;
+    $musicalRoots = $data['musicalRoots'] ?? null;
+    $musicalInfluences = $data['musicalInfluences'] ?? null;
+    $artisticVision = $data['artisticVision'] ?? null;
+    $status = $data['status'] ?? 'pending';
+    $registrationProofUrl = $data['registrationProofUrl'] ?? null;
+    $youtubeUrl = $data['youtubeUrl'] ?? null;
+    $instagramUrl = $data['instagramUrl'] ?? null;
+    $instagramHandle = $data['instagramHandle'] ?? null;
+    $tiktokUrl = $data['tiktokUrl'] ?? null;
+    $tiktokHandle = $data['tiktokHandle'] ?? null;
+    $twitterUrl = $data['twitterUrl'] ?? null;
+    $twitterHandle = $data['twitterHandle'] ?? null;
+    $headerBannerUrl = $data['headerBannerUrl'] ?? null;
+    $bannerGenreTheme = $data['bannerGenreTheme'] ?? null;
+
+    $stmt = $pdo->prepare("
+        INSERT INTO artists (
+            id, name, stageName, email, phone, city, pin, avatarUrl, bio,
+            musicalRoots, musicalInfluences, artisticVision, status,
+            registrationProofUrl, youtubeUrl, instagramUrl, instagramHandle,
+            tiktokUrl, tiktokHandle, twitterUrl, twitterHandle, headerBannerUrl,
+            bannerGenreTheme, registrationDate, created_at
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, NOW(), NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            name = VALUES(name),
+            stageName = VALUES(stageName),
+            phone = VALUES(phone),
+            city = VALUES(city),
+            avatarUrl = VALUES(avatarUrl),
+            bio = VALUES(bio),
+            musicalRoots = VALUES(musicalRoots),
+            musicalInfluences = VALUES(musicalInfluences),
+            artisticVision = VALUES(artisticVision),
+            status = VALUES(status),
+            registrationProofUrl = VALUES(registrationProofUrl),
+            youtubeUrl = VALUES(youtubeUrl),
+            instagramUrl = VALUES(instagramUrl),
+            instagramHandle = VALUES(instagramHandle),
+            tiktokUrl = VALUES(tiktokUrl),
+            tiktokHandle = VALUES(tiktokHandle),
+            twitterUrl = VALUES(twitterUrl),
+            twitterHandle = VALUES(twitterHandle),
+            headerBannerUrl = VALUES(headerBannerUrl),
+            bannerGenreTheme = VALUES(bannerGenreTheme)
+    ");
+
+    $stmt->execute([
+        $id, $name, $stageName, $email, $phone, $city, $pin, $avatarUrl, $bio,
+        $musicalRoots, $musicalInfluences, $artisticVision, $status,
+        $registrationProofUrl, $youtubeUrl, $instagramUrl, $instagramHandle,
+        $tiktokUrl, $tiktokHandle, $twitterUrl, $twitterHandle, $headerBannerUrl,
+        $bannerGenreTheme
+    ]);
+
+    jsonResponse([
+        'success' => true,
+        'message' => 'Enskripsyon atis la fèt avèk siksè nan baz done a!',
+        'data' => ['artistId' => $id],
+        'artistId' => $id,
+        'errors' => []
+    ], 201);
+}
+
+// ----------------------------------------------------------
+// PUT / PATCH: Modifye yon atis (oswa valide/rejte pa admin)
+// ----------------------------------------------------------
+if ($method === 'PUT' || $method === 'PATCH') {
+    $data = getJsonInput();
+    $id = $data['id'] ?? $_GET['id'] ?? null;
+
+    if (!$id) {
+        jsonResponse(['success' => false, 'message' => 'Id atis la obligatwa.'], 400);
+    }
+
+    $fields = [];
+    $params = [];
+
+    $updatable = [
+        'name', 'stageName', 'phone', 'city', 'avatarUrl', 'bio',
         'musicalRoots', 'musicalInfluences', 'artisticVision', 'artistQuote',
+        'status', 'registrationProofUrl', 'registrationRejectionReason',
         'youtubeUrl', 'instagramUrl', 'instagramHandle', 'tiktokUrl', 'tiktokHandle',
         'twitterUrl', 'twitterHandle', 'headerBannerUrl', 'bannerGenreTheme',
-        'isPaidThisMonth', 'paidDateThisMonth', 'paidAmountThisMonth', 'paidReferenceThisMonth'
+        'isPaidThisMonth', 'paidDateThisMonth', 'paidAmountThisMonth', 'paidReferenceThisMonth',
+        'suspendedAt', 'suspendedUntil', 'suspensionDays', 'suspensionReason'
     ];
 
-    $updates = [];
-    $params = [];
-    foreach ($allowedFields as $field) {
-        if (isset($data[$field])) {
-            $updates[] = "`$field` = ?";
-            $params[] = $data[$field];
+    foreach ($updatable as $f) {
+        if (isset($data[$f])) {
+            $fields[] = "`$f` = ?";
+            $params[] = $data[$f];
         }
     }
 
-    if (empty($updates)) {
-        jsonResponse(['success' => false, 'message' => 'Pa gen okenn done pou modifye.'], 400);
+    if (empty($fields)) {
+        jsonResponse(['success' => false, 'message' => 'Pa gen done pou modifye.'], 400);
     }
 
     $params[] = $id;
-    $sql = "UPDATE artists SET " . implode(', ', $updates) . " WHERE id = ?";
+    $sql = "UPDATE artists SET " . implode(', ', $fields) . " WHERE id = ?";
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
 
-    jsonResponse(['success' => true, 'message' => 'Pwofil atis la modifye avèk siksè.']);
+    jsonResponse([
+        'success' => true,
+        'message' => 'Pwofil atis la mete ajou avèk siksè!',
+        'data' => ['artistId' => $id],
+        'errors' => []
+    ]);
 }
 
 // ----------------------------------------------------------
 // DELETE: Efase yon atis
 // ----------------------------------------------------------
 if ($method === 'DELETE') {
-    $id = $_GET['id'] ?? null;
+    $id = $_GET['id'] ?? getJsonInput()['id'] ?? null;
+
     if (!$id) {
-        jsonResponse(['success' => false, 'message' => 'ID atis la obligatwa.'], 400);
+        jsonResponse(['success' => false, 'message' => 'Id atis la obligatwa.'], 400);
     }
+
     $stmt = $pdo->prepare("DELETE FROM artists WHERE id = ?");
     $stmt->execute([$id]);
-    jsonResponse(['success' => true, 'message' => 'Atis la efase avèk siksè.']);
+
+    jsonResponse([
+        'success' => true,
+        'message' => 'Atis la efase avèk siksè nan baz done a!',
+        'data' => ['artistId' => $id],
+        'errors' => []
+    ]);
 }
+
+jsonResponse(['success' => false, 'message' => 'Metòd sa a pa sipòte.'], 405);

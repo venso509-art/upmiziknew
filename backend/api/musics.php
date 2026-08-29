@@ -1,42 +1,70 @@
 <?php
 /**
- * UpMizik - Musics API Endpoint (Hostinger / MySQL)
+ * UpMizik - Musics API Endpoint (Hostinger / MySQL / PDO)
  */
 
-require_once __DIR__ . '/../config/db.php';
+require_once dirname(__DIR__) . '/middleware/cors.php';
+require_once dirname(__DIR__) . '/config/database.php';
 
 $pdo = getDBConnection();
 $method = $_SERVER['REQUEST_METHOD'];
 
 // ----------------------------------------------------------
-// GET: Rekipere tout mizik oswa filtre pa kategori / atis
+// GET: Rekipere tout mizik oswa filtre pa kategori / atis / albòm
 // ----------------------------------------------------------
 if ($method === 'GET') {
     $id = $_GET['id'] ?? null;
     $artistId = $_GET['artistId'] ?? null;
+    $albumId = $_GET['albumId'] ?? null;
     $category = $_GET['category'] ?? null;
     $status = $_GET['status'] ?? null; // 'active', 'pending', 'rejected', 'all'
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : null;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
 
     if ($id) {
-        $stmt = $pdo->prepare("SELECT * FROM musics WHERE id = ?");
+        $stmt = $pdo->prepare("
+            SELECT m.*, a.avatarUrl as artistAvatar, a.stageName, a.city as artistCity 
+            FROM musics m 
+            LEFT JOIN artists a ON m.artistId = a.id 
+            WHERE m.id = ?
+        ");
         $stmt->execute([$id]);
         $music = $stmt->fetch();
+
         if ($music) {
             // Rekipere kredi yo (split sheets)
             $credStmt = $pdo->prepare("SELECT * FROM music_credits WHERE musicId = ?");
             $credStmt->execute([$id]);
             $music['credits'] = $credStmt->fetchAll();
-            jsonResponse(['success' => true, 'music' => $music]);
+
+            jsonResponse([
+                'success' => true,
+                'message' => 'Mizik rekipere avèk siksè.',
+                'data' => ['music' => $music],
+                'music' => $music,
+                'errors' => []
+            ]);
         } else {
-            jsonResponse(['success' => false, 'message' => 'Mizik la pa jwenn.'], 404);
+            jsonResponse([
+                'success' => false,
+                'message' => 'Mizik la pa jwenn.',
+                'data' => null,
+                'errors' => ['Music not found']
+            ], 404);
         }
     } else {
-        $query = "SELECT m.*, a.avatarUrl as artistAvatar FROM musics m LEFT JOIN artists a ON m.artistId = a.id WHERE 1=1";
+        $query = "SELECT m.*, a.avatarUrl as artistAvatar, a.stageName FROM musics m LEFT JOIN artists a ON m.artistId = a.id WHERE 1=1";
         $params = [];
 
         if ($artistId) {
             $query .= " AND m.artistId = ?";
             $params[] = $artistId;
+        }
+
+        if ($albumId) {
+            $query .= " AND (m.album_id = ? OR m.albumName = ?)";
+            $params[] = $albumId;
+            $params[] = $albumId;
         }
 
         if ($category && $category !== 'Tout') {
@@ -53,11 +81,16 @@ if ($method === 'GET') {
         }
 
         $query .= " ORDER BY m.listens DESC, m.created_at DESC";
+
+        if ($limit !== null && $limit > 0) {
+            $query .= " LIMIT " . (int)$limit . " OFFSET " . (int)$offset;
+        }
+
         $stmt = $pdo->prepare($query);
         $stmt->execute($params);
         $musics = $stmt->fetchAll();
 
-        // Rekipere kredi pou chak mizik
+        // Rekipere kredi pou chak mizik si genyen
         if (!empty($musics)) {
             $musicIds = array_column($musics, 'id');
             $inClause = implode(',', array_fill(0, count($musicIds), '?'));
@@ -75,17 +108,58 @@ if ($method === 'GET') {
             }
         }
 
-        jsonResponse(['success' => true, 'musics' => $musics, 'count' => count($musics)]);
+        jsonResponse([
+            'success' => true,
+            'message' => 'Lis mizik rekipere.',
+            'data' => ['musics' => $musics, 'count' => count($musics)],
+            'musics' => $musics,
+            'count' => count($musics),
+            'errors' => []
+        ]);
     }
 }
 
 // ----------------------------------------------------------
-// POST: Ajoute yon nouvo mizik (ak lyen fichye Hostinger)
+// POST: Ajoute yon nouvo mizik oswa Ogmante play_count
 // ----------------------------------------------------------
 if ($method === 'POST') {
     $data = getJsonInput();
+    $action = $data['action'] ?? $_GET['action'] ?? 'create';
+
+    // 1. OGM уроk / OGM LISENS (Play Count Increment)
+    if ($action === 'play' || $action === 'increment_play') {
+        $musicId = $data['musicId'] ?? $data['id'] ?? null;
+        if (!$musicId) {
+            jsonResponse(['success' => false, 'message' => 'Id mizik la obligatwa.'], 400);
+        }
+
+        $upStmt = $pdo->prepare("UPDATE musics SET listens = listens + 1 WHERE id = ?");
+        $upStmt->execute([$musicId]);
+
+        // Rekipere artistId pou mete ajou totalListens atis la tou
+        $artStmt = $pdo->prepare("SELECT artistId FROM musics WHERE id = ?");
+        $artStmt->execute([$musicId]);
+        $artId = $artStmt->fetchColumn();
+        if ($artId) {
+            $pdo->prepare("UPDATE artists SET totalListens = totalListens + 1 WHERE id = ?")->execute([$artId]);
+        }
+
+        jsonResponse([
+            'success' => true,
+            'message' => 'Ekout la anrejistre avèk siksè!',
+            'data' => ['musicId' => $musicId],
+            'errors' => []
+        ]);
+    }
+
+    // 2. KREYE YON MIZIK
     if (empty($data['title']) || empty($data['artistId']) || empty($data['audioUrl'])) {
-        jsonResponse(['success' => false, 'message' => 'Tit, Atis, ak Fichye Odyo obligatwa.'], 400);
+        jsonResponse([
+            'success' => false,
+            'message' => 'Tit, Atis, ak Fichye Odyo obligatwa pou anrejistre yon mizik.',
+            'data' => null,
+            'errors' => ['Missing required fields: title, artistId, audioUrl']
+        ], 400);
     }
 
     $id = !empty($data['id']) ? $data['id'] : 'mus_' . time() . '_' . bin2hex(random_bytes(3));
@@ -95,44 +169,68 @@ if ($method === 'POST') {
     $feat = $data['feat'] ?? null;
     $category = $data['category'] ?? 'Tout';
     $releaseFormat = $data['releaseFormat'] ?? 'single';
+    $albumId = $data['album_id'] ?? $data['albumId'] ?? null;
     $albumName = $data['albumName'] ?? null;
-    $trackNumber = $data['trackNumber'] ?? 1;
+    $trackNumber = isset($data['trackNumber']) ? (int)$data['trackNumber'] : 1;
     $coverUrl = $data['coverUrl'] ?? 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500&auto=format&fit=crop&q=80';
     $audioUrl = $data['audioUrl'];
-    $duration = (int)($data['duration'] ?? 180);
+    $duration = isset($data['duration']) ? (int)$data['duration'] : 180;
+    $status = $data['status'] ?? 'active';
     $youtubeUrl = $data['youtubeUrl'] ?? null;
     $tiktokUrl = $data['tiktokUrl'] ?? null;
     $instagramUrl = $data['instagramUrl'] ?? null;
-    $status = $data['status'] ?? 'active';
 
     $stmt = $pdo->prepare("
         INSERT INTO musics (
-            id, title, artistId, artistName, feat, category, releaseFormat,
-            albumName, trackNumber, coverUrl, audioUrl, duration,
-            youtubeUrl, tiktokUrl, instagramUrl, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            id, title, artistId, artistName, feat, category, releaseFormat, 
+            album_id, albumName, trackNumber, coverUrl, audioUrl, duration, 
+            status, youtubeUrl, tiktokUrl, instagramUrl, created_at
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, 
+            ?, ?, ?, ?, ?, ?, 
+            ?, ?, ?, ?, NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            title = VALUES(title),
+            artistName = VALUES(artistName),
+            feat = VALUES(feat),
+            category = VALUES(category),
+            releaseFormat = VALUES(releaseFormat),
+            album_id = VALUES(album_id),
+            albumName = VALUES(albumName),
+            trackNumber = VALUES(trackNumber),
+            coverUrl = VALUES(coverUrl),
+            audioUrl = VALUES(audioUrl),
+            duration = VALUES(duration),
+            status = VALUES(status),
+            youtubeUrl = VALUES(youtubeUrl),
+            tiktokUrl = VALUES(tiktokUrl),
+            instagramUrl = VALUES(instagramUrl)
     ");
 
     $stmt->execute([
         $id, $title, $artistId, $artistName, $feat, $category, $releaseFormat,
-        $albumName, $trackNumber, $coverUrl, $audioUrl, $duration,
-        $youtubeUrl, $tiktokUrl, $instagramUrl, $status
+        $albumId, $albumName, $trackNumber, $coverUrl, $audioUrl, $duration,
+        $status, $youtubeUrl, $tiktokUrl, $instagramUrl
     ]);
 
-    // Anrejistre Kredi / Split Sheets si genyen
+    // Anrejistre Kredi (Credits / Split Sheet) si yo voye yo
     if (!empty($data['credits']) && is_array($data['credits'])) {
-        $credInsert = $pdo->prepare("
+        $delCredits = $pdo->prepare("DELETE FROM music_credits WHERE musicId = ?");
+        $delCredits->execute([$id]);
+
+        $insCred = $pdo->prepare("
             INSERT INTO music_credits (id, musicId, name, artistId, role, percentage, phone, notes)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
         foreach ($data['credits'] as $cred) {
             $credId = !empty($cred['id']) ? $cred['id'] : 'cred_' . time() . '_' . bin2hex(random_bytes(2));
-            $credInsert->execute([
+            $insCred->execute([
                 $credId,
                 $id,
-                $cred['name'] ?? 'Kolaboratè',
+                $cred['name'] ?? '',
                 $cred['artistId'] ?? null,
-                $cred['role'] ?? 'Featuring',
+                $cred['role'] ?? 'Kreyatè',
                 $cred['percentage'] ?? 0,
                 $cred['phone'] ?? null,
                 $cred['notes'] ?? null
@@ -142,78 +240,79 @@ if ($method === 'POST') {
 
     jsonResponse([
         'success' => true,
-        'message' => 'Mizik la pibliye avèk siksè sou Hostinger.',
+        'message' => 'Mizik la anrejistre avèk siksè nan baz done a!',
+        'data' => [
+            'musicId' => $id,
+            'title' => $title
+        ],
         'musicId' => $id,
-        'title' => $title
+        'errors' => []
     ], 201);
 }
 
 // ----------------------------------------------------------
-// PUT: Modifikasyon Mizik / Ogmante Tande / Validasyon Admin
+// PUT / PATCH: Modifye yon mizik (oswa valide/rejte)
 // ----------------------------------------------------------
-if ($method === 'PUT') {
+if ($method === 'PUT' || $method === 'PATCH') {
     $data = getJsonInput();
     $id = $data['id'] ?? $_GET['id'] ?? null;
 
     if (!$id) {
-        jsonResponse(['success' => false, 'message' => 'ID mizik la obligatwa.'], 400);
+        jsonResponse(['success' => false, 'message' => 'Id mizik la obligatwa.'], 400);
     }
 
-    // A. Aksyon espesifik: Ogmante Tande (Streams Counter)
-    if (isset($data['action']) && $data['action'] === 'listen') {
-        $stmt = $pdo->prepare("UPDATE musics SET listens = listens + 1 WHERE id = ?");
-        $stmt->execute([$id]);
-
-        // Ogmante total kout tande atis la tou
-        $artistStmt = $pdo->prepare("
-            UPDATE artists a 
-            JOIN musics m ON m.artistId = a.id 
-            SET a.totalListens = a.totalListens + 1 
-            WHERE m.id = ?
-        ");
-        $artistStmt->execute([$id]);
-
-        jsonResponse(['success' => true, 'message' => 'Kout tande anrejistre.']);
-    }
-
-    // B. Aksyon Admin: Valide oswa Refize Mizik
-    if (isset($data['status'])) {
-        $newStatus = $data['status']; // 'active', 'rejected', 'pending'
-        $rejectionReason = $data['rejectionReason'] ?? null;
-        $stmt = $pdo->prepare("UPDATE musics SET status = ?, rejectionReason = ? WHERE id = ?");
-        $stmt->execute([$newStatus, $rejectionReason, $id]);
-        jsonResponse(['success' => true, 'message' => 'Estati mizik la aktyalize.']);
-    }
-
-    // C. Modifikasyon Jeneral Metadata
-    $allowed = ['title', 'feat', 'category', 'coverUrl', 'audioUrl', 'albumName', 'youtubeUrl', 'tiktokUrl', 'instagramUrl'];
-    $updates = [];
+    $fields = [];
     $params = [];
-    foreach ($allowed as $field) {
-        if (isset($data[$field])) {
-            $updates[] = "`$field` = ?";
-            $params[] = $data[$field];
+
+    $updatable = [
+        'title', 'feat', 'category', 'releaseFormat', 'album_id', 'albumName',
+        'trackNumber', 'coverUrl', 'audioUrl', 'duration', 'status',
+        'rejectionReason', 'youtubeUrl', 'tiktokUrl', 'instagramUrl', 'position'
+    ];
+
+    foreach ($updatable as $f) {
+        if (isset($data[$f])) {
+            $fields[] = "`$f` = ?";
+            $params[] = $data[$f];
         }
     }
 
-    if (!empty($updates)) {
-        $params[] = $id;
-        $stmt = $pdo->prepare("UPDATE musics SET " . implode(', ', $updates) . " WHERE id = ?");
-        $stmt->execute($params);
+    if (empty($fields)) {
+        jsonResponse(['success' => false, 'message' => 'Pa gen done pou modifye.'], 400);
     }
 
-    jsonResponse(['success' => true, 'message' => 'Mizik modifye avèk siksè.']);
+    $params[] = $id;
+    $sql = "UPDATE musics SET " . implode(', ', $fields) . " WHERE id = ?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
+    jsonResponse([
+        'success' => true,
+        'message' => 'Mizik la mete ajou avèk siksè!',
+        'data' => ['musicId' => $id],
+        'errors' => []
+    ]);
 }
 
 // ----------------------------------------------------------
 // DELETE: Efase yon mizik
 // ----------------------------------------------------------
 if ($method === 'DELETE') {
-    $id = $_GET['id'] ?? null;
+    $id = $_GET['id'] ?? getJsonInput()['id'] ?? null;
+
     if (!$id) {
-        jsonResponse(['success' => false, 'message' => 'ID mizik la obligatwa.'], 400);
+        jsonResponse(['success' => false, 'message' => 'Id mizik la obligatwa.'], 400);
     }
+
     $stmt = $pdo->prepare("DELETE FROM musics WHERE id = ?");
     $stmt->execute([$id]);
-    jsonResponse(['success' => true, 'message' => 'Mizik la efase avèk siksè.']);
+
+    jsonResponse([
+        'success' => true,
+        'message' => 'Mizik la efase avèk siksè nan baz done a!',
+        'data' => ['musicId' => $id],
+        'errors' => []
+    ]);
 }
+
+jsonResponse(['success' => false, 'message' => 'Metòd sa a pa sipòte.'], 405);

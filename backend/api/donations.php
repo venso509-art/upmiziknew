@@ -1,18 +1,57 @@
 <?php
 /**
- * UpMizik - Donations API Endpoint (Hostinger / MySQL)
+ * UpMizik - Donations API Endpoint & MonCash Gateway Integration
  */
 
-require_once __DIR__ . '/../config/db.php';
+require_once dirname(__DIR__) . '/middleware/cors.php';
+require_once dirname(__DIR__) . '/config/database.php';
+require_once dirname(__DIR__) . '/services/moncash.php';
 
 $pdo = getDBConnection();
+$moncash = new MonCashService();
 $method = $_SERVER['REQUEST_METHOD'];
 
 // ----------------------------------------------------------
-// GET: Rekipere tout donasyon oswa filtre pa atis / estati
+// GET: Lis Donasyon oswa Verifye Estati MonCash
 // ----------------------------------------------------------
 if ($method === 'GET') {
+    $action = $_GET['action'] ?? 'list';
+
+    // 1. Verifye estati yon peman MonCash
+    if ($action === 'verify' || $action === 'return') {
+        $transactionId = $_GET['transactionId'] ?? $_GET['transaction_id'] ?? null;
+        $orderId = $_GET['orderId'] ?? $_GET['order_id'] ?? null;
+
+        if (!$transactionId && !$orderId) {
+            jsonResponse([
+                'success' => false,
+                'message' => 'Transaction ID oswa Order ID obligatwa pou verifikasyon.',
+                'data' => null,
+                'errors' => ['Missing transaction identifier']
+            ], 400);
+        }
+
+        $verification = $moncash->verifyPayment($transactionId ?? '', $orderId);
+
+        if ($verification['success'] && ($verification['is_paid'] ?? false)) {
+            // Mete ajou baz done a si gen yon donation korespondan
+            if ($orderId) {
+                $upStmt = $pdo->prepare("UPDATE donations SET status = 'validated' WHERE id = ?");
+                $upStmt->execute([$orderId]);
+            }
+        }
+
+        jsonResponse([
+            'success' => $verification['success'],
+            'message' => $verification['message'] ?? 'Verifikasyon fini',
+            'data' => $verification,
+            'errors' => []
+        ]);
+    }
+
+    // 2. Lis donasyon
     $artistId = $_GET['artistId'] ?? null;
+    $musicId = $_GET['musicId'] ?? null;
     $status = $_GET['status'] ?? null;
 
     $query = "SELECT * FROM donations WHERE 1=1";
@@ -22,8 +61,11 @@ if ($method === 'GET') {
         $query .= " AND artistId = ?";
         $params[] = $artistId;
     }
-
-    if ($status && in_array($status, ['pending', 'validated', 'rejected'])) {
+    if ($musicId) {
+        $query .= " AND musicId = ?";
+        $params[] = $musicId;
+    }
+    if ($status && $status !== 'all') {
         $query .= " AND status = ?";
         $params[] = $status;
     }
@@ -33,147 +75,159 @@ if ($method === 'GET') {
     $stmt->execute($params);
     $donations = $stmt->fetchAll();
 
-    jsonResponse(['success' => true, 'donations' => $donations, 'count' => count($donations)]);
+    jsonResponse([
+        'success' => true,
+        'message' => 'Lis donasyon rekipere.',
+        'data' => ['donations' => $donations, 'count' => count($donations)],
+        'donations' => $donations,
+        'count' => count($donations),
+        'errors' => []
+    ]);
 }
 
 // ----------------------------------------------------------
-// POST: Soumèt yon nouvo Donasyon avèk Prèv Peman sou Hostinger
+// POST: Kreye yon nouvo Donasyon oswa MonCash Order
 // ----------------------------------------------------------
 if ($method === 'POST') {
     $data = getJsonInput();
-    if (empty($data['artistId']) || empty($data['amount']) || empty($data['proofUrl'])) {
-        jsonResponse(['success' => false, 'message' => 'Atis, Montan, ak Prèv Peman obligatwa.'], 400);
+    $action = $data['action'] ?? 'create';
+
+    // 1. Inisye yon Peman MonCash
+    if ($action === 'initiate_moncash') {
+        $amount = (float)($data['amount'] ?? 0);
+        $musicId = $data['musicId'] ?? 'general';
+        $artistId = $data['artistId'] ?? 'general';
+        $donorName = trim($data['donorName'] ?? 'Fanatik UpMizik');
+        $donorPhone = trim($data['donorPhone'] ?? '');
+
+        if ($amount <= 0) {
+            jsonResponse(['success' => false, 'message' => 'Montan donasyon an dwe plis pase 0.'], 400);
+        }
+
+        $orderId = 'don_' . time() . '_' . bin2hex(random_bytes(3));
+        $paymentResult = $moncash->createPayment($orderId, $amount, "Sipò UpMizik pou {$data['artistName']}");
+
+        if ($paymentResult['success']) {
+            // Anrejistre kòm pending nan baz done a
+            $artistShare = $amount * 0.85;
+            $platformShare = $amount * 0.15;
+
+            $ins = $pdo->prepare("
+                INSERT INTO donations (
+                    id, musicId, musicTitle, artistId, artistName, amount,
+                    currency, donorName, donorPhone, proofUrl, paymentMethod,
+                    status, artistShare, platformShare, created_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?,
+                    'HTG', ?, ?, 'MonCash Online', 'MonCash',
+                    'pending', ?, ?, NOW()
+                )
+            ");
+            $ins->execute([
+                $orderId, $musicId, $data['musicTitle'] ?? 'Mizik UpMizik',
+                $artistId, $data['artistName'] ?? 'Atis', $amount,
+                $donorName, $donorPhone, $artistShare, $platformShare
+            ]);
+        }
+
+        jsonResponse([
+            'success' => $paymentResult['success'],
+            'message' => $paymentResult['message'] ?? 'Inisyasyon peman fini',
+            'data' => array_merge($paymentResult, ['orderId' => $orderId]),
+            'errors' => []
+        ]);
+    }
+
+    // 2. Anrejistre yon Donasyon Manyèl ak Prèv Transfè (MonCash / Natcash)
+    if (empty($data['musicId']) || empty($data['artistId']) || empty($data['amount'])) {
+        jsonResponse([
+            'success' => false,
+            'message' => 'Enfòmasyon sou mizik, atis ak montan obligatwa pou anrejistre yon donasyon.',
+            'data' => null,
+            'errors' => ['Missing required donation fields']
+        ], 400);
     }
 
     $id = !empty($data['id']) ? $data['id'] : 'don_' . time() . '_' . bin2hex(random_bytes(3));
-    $musicId = $data['musicId'] ?? '';
-    $musicTitle = $data['musicTitle'] ?? 'Donasyon Dirèk Pou Atis';
+    $musicId = $data['musicId'];
+    $musicTitle = $data['musicTitle'] ?? 'Mizik UpMizik';
     $artistId = $data['artistId'];
     $artistName = $data['artistName'] ?? 'Atis UpMizik';
     $amount = (float)$data['amount'];
-    $currency = in_array($data['currency'] ?? 'USD', ['USD', 'HTG']) ? $data['currency'] : 'USD';
-    $donorName = $data['donorName'] ?? 'Fanatik Anonyme';
-    $donorPhone = $data['donorPhone'] ?? '';
-    $proofUrl = $data['proofUrl'];
+    $currency = $data['currency'] ?? 'USD';
+    $donorName = $data['donorName'] ?? 'Fanatik Anonim';
+    $donorPhone = $data['donorPhone'] ?? 'Non espesifye';
+    $proofUrl = $data['proofUrl'] ?? '';
     $paymentMethod = $data['paymentMethod'] ?? 'MonCash';
     $status = $data['status'] ?? 'pending';
-
-    // Kalkile pati atis (85%) ak pati platfòm (15% + 0.99)
-    $artistShare = round($amount * 0.85, 2);
-    $platformShare = round($amount * 0.15, 2);
+    $artistShare = (float)($data['artistShare'] ?? ($amount * 0.85));
+    $platformShare = (float)($data['platformShare'] ?? ($amount * 0.15));
 
     $stmt = $pdo->prepare("
         INSERT INTO donations (
-            id, musicId, musicTitle, artistId, artistName, amount, currency,
-            donorName, donorPhone, proofUrl, paymentMethod, status,
-            artistShare, platformShare
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            id, musicId, musicTitle, artistId, artistName, amount,
+            currency, donorName, donorPhone, proofUrl, paymentMethod,
+            status, artistShare, platformShare, created_at
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            status = VALUES(status),
+            proofUrl = VALUES(proofUrl)
     ");
 
     $stmt->execute([
-        $id, $musicId, $musicTitle, $artistId, $artistName, $amount, $currency,
-        $donorName, $donorPhone, $proofUrl, $paymentMethod, $status,
-        $artistShare, $platformShare
+        $id, $musicId, $musicTitle, $artistId, $artistName, $amount,
+        $currency, $donorName, $donorPhone, $proofUrl, $paymentMethod,
+        $status, $artistShare, $platformShare
     ]);
 
     jsonResponse([
         'success' => true,
-        'message' => 'Donasyon soumèt avèk siksè. L ap verifye pa admin.',
+        'message' => 'Donasyon an anrejistre avèk siksè nan baz done a (estati: pending)!',
+        'data' => ['donationId' => $id],
         'donationId' => $id,
-        'status' => 'pending'
+        'errors' => []
     ], 201);
 }
 
 // ----------------------------------------------------------
-// PUT: Validasyon oswa Refi Donasyon pa Admin
+// PUT / PATCH: Valide oswa Rejte Donasyon (Admin)
 // ----------------------------------------------------------
-if ($method === 'PUT') {
+if ($method === 'PUT' || $method === 'PATCH') {
     $data = getJsonInput();
     $id = $data['id'] ?? $_GET['id'] ?? null;
-    $accept = $data['accept'] ?? ($data['status'] === 'validated');
+    $status = $data['status'] ?? null;
 
-    if (!$id) {
-        jsonResponse(['success' => false, 'message' => 'ID donasyon an obligatwa.'], 400);
+    if (!$id || !$status) {
+        jsonResponse(['success' => false, 'message' => 'Id ak nouvo estati a obligatwa.'], 400);
     }
 
-    $donStmt = $pdo->prepare("SELECT * FROM donations WHERE id = ?");
-    $donStmt->execute([$id]);
-    $donation = $donStmt->fetch();
+    $stmt = $pdo->prepare("UPDATE donations SET status = ? WHERE id = ?");
+    $stmt->execute([$status, $id]);
 
-    if (!$donation) {
-        jsonResponse(['success' => false, 'message' => 'Donasyon an pa jwenn.'], 404);
-    }
+    // Si donasyon an valide, ogmante totalDonations nan tablo musics ak artists
+    if ($status === 'validated') {
+        $getDon = $pdo->prepare("SELECT * FROM donations WHERE id = ?");
+        $getDon->execute([$id]);
+        $don = $getDon->fetch();
 
-    $newStatus = $accept ? 'validated' : 'rejected';
-    $updateStmt = $pdo->prepare("UPDATE donations SET status = ? WHERE id = ?");
-    $updateStmt->execute([$newStatus, $id]);
-
-    if ($accept) {
-        // Ogmante total donasyon atis la
-        $artistUp = $pdo->prepare("
-            UPDATE artists SET totalDonationsReceived = totalDonationsReceived + ? WHERE id = ?
-        ");
-        $artistUp->execute([$donation['artistShare'], $donation['artistId']]);
-
-        // Si te gen yon mizik lye, ogmante total donasyon mizik la tou
-        if (!empty($donation['musicId'])) {
-            $musUp = $pdo->prepare("
-                UPDATE musics SET totalDonations = totalDonations + ? WHERE id = ?
-            ");
-            $musUp->execute([$donation['amount'], $donation['musicId']]);
-        }
-
-        // Voye notifikasyon nan bwat mesaj atis la
-        $artistStmt = $pdo->prepare("SELECT email, stageName FROM artists WHERE id = ?");
-        $artistStmt->execute([$donation['artistId']]);
-        $art = $artistStmt->fetch();
-
-        if ($art) {
-            $inboxId = 'msg_don_' . time() . '_' . bin2hex(random_bytes(3));
-            $inboxStmt = $pdo->prepare("
-                INSERT INTO artist_inbox (
-                    id, artistId, artistName, artistEmail, type, subject,
-                    senderName, senderEmail, recipientEmail, previewText, bodyText,
-                    donationDetails, isRead
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-            ");
-            
-            $donationDetails = json_encode([
-                'donationId' => $id,
-                'musicTitle' => $donation['musicTitle'],
-                'musicId' => $donation['musicId'],
-                'donorName' => $donation['donorName'],
-                'donorPhone' => $donation['donorPhone'],
-                'grossAmount' => (float)$donation['amount'],
-                'currency' => $donation['currency'],
-                'artistShare85' => (float)$donation['artistShare'],
-                'platformShare15' => (float)$donation['platformShare'],
-                'validatedAt' => date('Y-m-d H:i:s'),
-                'transactionRef' => $id,
-                'paymentMethod' => $donation['paymentMethod']
-            ], JSON_UNESCAPED_UNICODE);
-
-            $inboxStmt->execute([
-                $inboxId,
-                $donation['artistId'],
-                $art['stageName'],
-                $art['email'],
-                'donation_received',
-                'Ou resevwa yon nouvo donasyon $' . $donation['amount'] . ' ' . $donation['currency'],
-                'Finans UpMizik',
-                'finance@upmizik.com',
-                $art['email'],
-                'Yon fanatik voye sipò pou ou: ' . $donation['donorName'],
-                "Bonjou {$art['stageName']},\n\nNou kontan enfòme w ke prèv donasyon {$donation['donorName']} an valide. Ou resevwa {$donation['artistShare']} {$donation['currency']} (85%).",
-                $donationDetails
-            ]);
+        if ($don) {
+            $pdo->prepare("UPDATE musics SET totalDonations = totalDonations + ? WHERE id = ?")
+                ->execute([$don['amount'], $don['musicId']]);
+            $pdo->prepare("UPDATE artists SET totalDonationsReceived = totalDonationsReceived + ? WHERE id = ?")
+                ->execute([$don['artistShare'], $don['artistId']]);
         }
     }
 
     jsonResponse([
         'success' => true,
-        'message' => $accept ? 'Donasyon an valide avèk siksè.' : 'Donasyon an refize.',
-        'donationId' => $id,
-        'status' => $newStatus
+        'message' => 'Estati donasyon an mete ajou avèk siksè!',
+        'data' => ['donationId' => $id, 'status' => $status],
+        'errors' => []
     ]);
 }
+
+jsonResponse(['success' => false, 'message' => 'Metòd sa a pa sipòte.'], 405);

@@ -1,0 +1,3 @@
+# Bloke tout aksè piblik sou dosye logs
+Order Deny,Allow
+Deny from all

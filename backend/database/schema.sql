@@ -1,14 +1,33 @@
 -- ==========================================================
--- UPMIZIK - DATABASE SCHEMA (MySQL / Hostinger)
+-- UPMIZIK - DATABASE SCHEMA (MySQL 8.0+ / Hostinger VPS / aaPanel)
 -- ==========================================================
--- Enpòte fichye sa a dirèkteman nan phpMyAdmin sou Hostinger.
+-- Enpòte fichye sa a nan phpMyAdmin oswa egzekite l via terminal:
+-- mysql -u [itilizatè] -p [non_baz_done] < schema.sql
 -- ==========================================================
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ----------------------------------------------------------
--- 1. Tablo: artists (Tout atis ki anrejistre)
+-- 1. Tablo: admins (Administratè Platfòm nan)
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `admins` (
+  `id` VARCHAR(64) NOT NULL PRIMARY KEY,
+  `username` VARCHAR(64) NOT NULL UNIQUE,
+  `email` VARCHAR(255) NOT NULL UNIQUE,
+  `password_hash` VARCHAR(255) NOT NULL,
+  `name` VARCHAR(255) NOT NULL DEFAULT 'Administratè UpMizik',
+  `role` ENUM('super_admin', 'moderator', 'finance_admin') NOT NULL DEFAULT 'super_admin',
+  `status` ENUM('active', 'inactive', 'suspended') NOT NULL DEFAULT 'active',
+  `last_login` DATETIME DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX `idx_admin_username` (`username`),
+  INDEX `idx_admin_email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------
+-- 2. Tablo: artists (Tout atis ki anrejistre)
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `artists` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -17,7 +36,7 @@ CREATE TABLE IF NOT EXISTS `artists` (
   `email` VARCHAR(255) NOT NULL UNIQUE,
   `phone` VARCHAR(64) NOT NULL,
   `city` VARCHAR(128) NOT NULL DEFAULT 'Pòtoprens',
-  `pin` VARCHAR(16) NOT NULL DEFAULT '0000',
+  `pin` VARCHAR(255) NOT NULL DEFAULT '0000',
   `avatarUrl` TEXT DEFAULT NULL,
   `bio` TEXT DEFAULT NULL,
   `musicalRoots` VARCHAR(255) DEFAULT NULL,
@@ -55,16 +74,38 @@ CREATE TABLE IF NOT EXISTS `artists` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------
--- 2. Tablo: musics (Mizik, Chante, Track, Albòm)
+-- 3. Tablo: albums (Albòm, EP, Mixtape)
 -- ----------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `musics` (
+CREATE TABLE IF NOT EXISTS `albums` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
   `title` VARCHAR(255) NOT NULL,
   `artistId` VARCHAR(64) NOT NULL,
   `artistName` VARCHAR(255) NOT NULL,
+  `coverUrl` TEXT NOT NULL,
+  `description` TEXT DEFAULT NULL,
+  `genre` VARCHAR(64) NOT NULL DEFAULT 'Tout',
+  `releaseDate` DATE NOT NULL DEFAULT (CURRENT_DATE),
+  `status` ENUM('active', 'pending', 'archived') NOT NULL DEFAULT 'active',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX `idx_albums_artist` (`artistId`),
+  CONSTRAINT `fk_albums_artist` FOREIGN KEY (`artistId`) REFERENCES `artists` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------
+-- 4. Tablo: musics (Mizik, Chante, Track)
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `musics` (
+  `id` VARCHAR(64) NOT NULL PRIMARY KEY,
+  `title` VARCHAR(255) NOT NULL,
+  `slug` VARCHAR(255) DEFAULT NULL,
+  `artistId` VARCHAR(64) NOT NULL,
+  `artistName` VARCHAR(255) NOT NULL,
   `feat` VARCHAR(255) DEFAULT NULL,
   `category` VARCHAR(64) NOT NULL DEFAULT 'Tout',
+  `genre` VARCHAR(64) DEFAULT 'Konpa',
   `releaseFormat` ENUM('single', 'album', 'ep', 'mixtape', 'demo') NOT NULL DEFAULT 'single',
+  `album_id` VARCHAR(64) DEFAULT NULL,
   `albumName` VARCHAR(255) DEFAULT NULL,
   `trackNumber` INT DEFAULT 1,
   `coverUrl` TEXT NOT NULL,
@@ -73,6 +114,7 @@ CREATE TABLE IF NOT EXISTS `musics` (
   `listens` BIGINT NOT NULL DEFAULT 0,
   `totalDonations` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   `position` INT DEFAULT NULL,
+  `description` TEXT DEFAULT NULL,
   `youtubeUrl` VARCHAR(512) DEFAULT NULL,
   `tiktokUrl` VARCHAR(512) DEFAULT NULL,
   `instagramUrl` VARCHAR(512) DEFAULT NULL,
@@ -84,6 +126,7 @@ CREATE TABLE IF NOT EXISTS `musics` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX `idx_music_artist` (`artistId`),
+  INDEX `idx_music_album` (`album_id`),
   INDEX `idx_music_category` (`category`),
   INDEX `idx_music_status` (`status`),
   INDEX `idx_music_listens` (`listens`),
@@ -91,7 +134,7 @@ CREATE TABLE IF NOT EXISTS `musics` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------
--- 3. Tablo: music_credits (Split sheet & kolaborasyon)
+-- 5. Tablo: music_credits (Split sheet & kolaborasyon)
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `music_credits` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -108,7 +151,7 @@ CREATE TABLE IF NOT EXISTS `music_credits` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------
--- 4. Tablo: donations (Donasyon, Kontribisyon, Sipò Fanatik)
+-- 6. Tablo: donations (Donasyon, Kontribisyon, Sipò Fanatik)
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `donations` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -118,21 +161,78 @@ CREATE TABLE IF NOT EXISTS `donations` (
   `artistName` VARCHAR(255) NOT NULL,
   `amount` DECIMAL(10,2) NOT NULL,
   `currency` ENUM('USD', 'HTG') NOT NULL DEFAULT 'USD',
+  `provider` VARCHAR(64) NOT NULL DEFAULT 'MonCash',
+  `transaction_id` VARCHAR(128) DEFAULT NULL,
   `donorName` VARCHAR(255) NOT NULL,
+  `donor_email` VARCHAR(255) DEFAULT NULL,
   `donorPhone` VARCHAR(64) NOT NULL,
   `proofUrl` TEXT NOT NULL,
   `paymentMethod` VARCHAR(64) DEFAULT 'MonCash',
   `status` ENUM('pending', 'validated', 'rejected') NOT NULL DEFAULT 'pending',
   `artistShare` DECIMAL(10,2) NOT NULL,
   `platformShare` DECIMAL(10,2) NOT NULL,
+  `metadata` JSON DEFAULT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX `idx_donations_artist` (`artistId`),
   INDEX `idx_donations_music` (`musicId`),
-  INDEX `idx_donations_status` (`status`)
+  INDEX `idx_donations_status` (`status`),
+  INDEX `idx_donations_tx` (`transaction_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------
--- 5. Tablo: artist_inbox (Bwat mesaj, notifikasyon & notis atis)
+-- 7. Tablo: payouts (Retrè Lajan Atis MonCash / Natcash)
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `payouts` (
+  `id` VARCHAR(64) NOT NULL PRIMARY KEY,
+  `artistId` VARCHAR(64) NOT NULL,
+  `artistName` VARCHAR(255) NOT NULL,
+  `amount` DECIMAL(10,2) NOT NULL,
+  `currency` ENUM('USD', 'HTG') NOT NULL DEFAULT 'HTG',
+  `paymentMethod` VARCHAR(64) NOT NULL DEFAULT 'MonCash',
+  `accountNumber` VARCHAR(64) NOT NULL,
+  `status` ENUM('pending', 'approved', 'paid', 'rejected') NOT NULL DEFAULT 'pending',
+  `transactionReference` VARCHAR(128) DEFAULT NULL,
+  `notes` TEXT DEFAULT NULL,
+  `requestedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `processedAt` DATETIME DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX `idx_payouts_artist` (`artistId`),
+  INDEX `idx_payouts_status` (`status`),
+  CONSTRAINT `fk_payouts_artist` FOREIGN KEY (`artistId`) REFERENCES `artists` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------
+-- 8. Tablo: settings & platform_settings (Opsyon platfòm nan)
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `settings` (
+  `key_name` VARCHAR(64) NOT NULL PRIMARY KEY,
+  `key_value` LONGTEXT NOT NULL,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `platform_settings` (
+  `setting_key` VARCHAR(64) NOT NULL PRIMARY KEY,
+  `setting_value` LONGTEXT NOT NULL,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------
+-- 9. Tablo: backup_logs (Jounal Ekspòtasyon & Backup)
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `backup_logs` (
+  `id` VARCHAR(64) NOT NULL PRIMARY KEY,
+  `filename` VARCHAR(255) NOT NULL,
+  `file_size` BIGINT NOT NULL DEFAULT 0,
+  `status` ENUM('success', 'failed') NOT NULL DEFAULT 'success',
+  `created_by` VARCHAR(64) NOT NULL DEFAULT 'system',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_backup_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------
+-- 10. Tablo: artist_inbox (Bwat mesaj & notifikasyon atis)
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `artist_inbox` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -158,7 +258,7 @@ CREATE TABLE IF NOT EXISTS `artist_inbox` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------
--- 6. Tablo: social_posts (Piblikasyon feed sosyal atis yo)
+-- 11. Tablo: social_posts & social_comments
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `social_posts` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -184,9 +284,6 @@ CREATE TABLE IF NOT EXISTS `social_posts` (
   INDEX `idx_posts_artist` (`artistId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ----------------------------------------------------------
--- 7. Tablo: social_comments (Kòmantè sou post sosyal yo)
--- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `social_comments` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
   `postId` VARCHAR(64) NOT NULL,
@@ -200,7 +297,7 @@ CREATE TABLE IF NOT EXISTS `social_comments` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------
--- 8. Tablo: music_comments (Kòmantè anba mizik)
+-- 12. Tablo: music_comments (Kòmantè anba mizik)
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `music_comments` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -214,7 +311,7 @@ CREATE TABLE IF NOT EXISTS `music_comments` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------
--- 9. Tablo: push_notifications (Notifikasyon pouse)
+-- 13. Tablo: push_notifications & archive_records
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `push_notifications` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -232,9 +329,6 @@ CREATE TABLE IF NOT EXISTS `push_notifications` (
   INDEX `idx_push_target` (`targetArtistId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ----------------------------------------------------------
--- 10. Tablo: archive_records (Achivman chak fen mwa)
--- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `archive_records` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
   `resetDate` DATETIME NOT NULL,
@@ -248,7 +342,7 @@ CREATE TABLE IF NOT EXISTS `archive_records` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------
--- 11. Tablo: pubs (Piblisite & banyè komèsyal)
+-- 14. Tablo: pubs & rpa
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `pubs` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -263,9 +357,6 @@ CREATE TABLE IF NOT EXISTS `pubs` (
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ----------------------------------------------------------
--- 12. Tablo: rpa (Révélation / Pwojè Atis nan vedèt)
--- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `rpa` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
   `title` VARCHAR(255) NOT NULL,
@@ -281,7 +372,7 @@ CREATE TABLE IF NOT EXISTS `rpa` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------
--- 13. Tablo: security_logs (Sekirite admin, tantativ koneksyon)
+-- 15. Tablo Sekirite: security_logs, tentatives_connexion, blocages_securite
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `security_logs` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -297,18 +388,6 @@ CREATE TABLE IF NOT EXISTS `security_logs` (
   `unlockToken` VARCHAR(128) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ----------------------------------------------------------
--- 14. Tablo: platform_settings (Opsyon & nimewo MonCash/Natcash)
--- ----------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `platform_settings` (
-  `setting_key` VARCHAR(64) NOT NULL PRIMARY KEY,
-  `setting_value` LONGTEXT NOT NULL,
-  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ----------------------------------------------------------
--- 15. Tablo: tentatives_connexion (Rate Limiting & Fòs Brit)
--- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `tentatives_connexion` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
   `identifiant` VARCHAR(255) NOT NULL,
@@ -323,9 +402,6 @@ CREATE TABLE IF NOT EXISTS `tentatives_connexion` (
   INDEX `idx_tentatives_date` (`date_tentative`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ----------------------------------------------------------
--- 16. Tablo: blocages_securite (Blokaj Tanporè Rate Limiting)
--- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `blocages_securite` (
   `identifiant` VARCHAR(255) NOT NULL PRIMARY KEY,
   `ip_adresse` VARCHAR(64) DEFAULT NULL,
@@ -337,9 +413,6 @@ CREATE TABLE IF NOT EXISTS `blocages_securite` (
   INDEX `idx_blocages_date` (`bloque_jusqua`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ----------------------------------------------------------
--- 17. Tablo: logs_activite (Jounal Aktivite & Tantativ Koneksyon)
--- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `logs_activite` (
   `id` VARCHAR(64) NOT NULL PRIMARY KEY,
   `type_evenement` VARCHAR(64) NOT NULL,
@@ -357,7 +430,14 @@ CREATE TABLE IF NOT EXISTS `logs_activite` (
   INDEX `idx_logs_date` (`date_creation`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Inisyalize konfigirasyon peman debaz
+-- ----------------------------------------------------------
+-- INIZYALIZASYON ADMIN PRENSIPAL & KONFIGIRASYON
+-- ----------------------------------------------------------
+-- Modpas par defo pou premye kreyasyon: "AdminUpMizik2026Secure!" (Bcrypt Hash)
+INSERT INTO `admins` (`id`, `username`, `email`, `password_hash`, `name`, `role`, `status`) VALUES
+('adm_master_001', 'admin', 'admin@upmizik.com', '$2y$10$7zBsmv9zR5lO51vMhVq9wO5F0yFzNl6g3C1d3Q/tG5p6r8s9t0u1v', 'Super Admin UpMizik', 'super_admin', 'active')
+ON DUPLICATE KEY UPDATE `username` = `username`;
+
 INSERT INTO `platform_settings` (`setting_key`, `setting_value`) VALUES
 ('moncash_numbers', '["+509 3800-0000", "+509 4400-0000"]'),
 ('natcash_numbers', '["+509 3200-0000"]'),
@@ -366,5 +446,10 @@ INSERT INTO `platform_settings` (`setting_key`, `setting_value`) VALUES
 ('artist_percentage', '85'),
 ('platform_percentage', '15')
 ON DUPLICATE KEY UPDATE `setting_key` = `setting_key`;
+
+INSERT INTO `settings` (`key_name`, `key_value`) VALUES
+('exchange_rate_htg_usd', '132.50'),
+('app_title', 'UpMizik - Platfòm Mizik Ayisyen')
+ON DUPLICATE KEY UPDATE `key_name` = `key_name`;
 
 SET FOREIGN_KEY_CHECKS = 1;
