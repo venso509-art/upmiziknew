@@ -17,7 +17,7 @@ if [ ! -d "$WEB_ROOT" ]; then
     echo "📁 Dosye $WEB_ROOT pa egziste. Klonen repozitwa a..."
     mkdir -p /www/wwwroot
     cd /www/wwwroot
-    git clone https://github.com/ITDEV-VENSO/UpMizik.git upmizik.com
+    git clone https://github.com/venso509-art/upmiziknew.git upmizik.com
 fi
 
 cd $WEB_ROOT
@@ -41,6 +41,11 @@ fi
 
 # 5. Enstale depandans yo epi fè Build Production lan
 echo "🔨 3/5: Ap enstale depandans ak fè Build Vite (dist)..."
+# aaPanel mete .user.ini pwoteje (immutable) nan dist, retire li pou Vite ka bati lib
+if [ -f "$WEB_ROOT/dist/.user.ini" ]; then
+    chattr -i "$WEB_ROOT/dist/.user.ini" 2>/dev/null || true
+    rm -f "$WEB_ROOT/dist/.user.ini" 2>/dev/null || true
+fi
 npm install
 npm run build
 

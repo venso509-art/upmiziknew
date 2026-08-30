@@ -75,7 +75,7 @@ Konekte sou VPS ou a via SSH nan terminal Ubuntu 22.04:
 cd /www/wwwroot
 
 # 2. Si dosye a vid oswa w ap rale repozitwa a pou premye fwa:
-git clone https://github.com/ITDEV-VENSO/UpMizik.git upmizik.com
+git clone https://github.com/venso509-art/upmiziknew.git upmizik.com
 cd upmizik.com
 
 # 3. Kreye fichye anviwònman .env la
