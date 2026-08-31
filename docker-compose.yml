@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  # 1. Aplikasyon UpMizik (Frontend + Backend PHP/Nginx)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - DB_HOST=db
+      - DB_NAME=upmizik_db
+      - DB_USER=upmizik_user
+      - DB_PASS=upmizik_secure_pass_2026
+      - APP_ENV=production
+    volumes:
+      # Volim pèmanan pou fichye mizik ak foto pa janm pèdi lè gen mizajou
+      - uploads_data:/var/www/html/backend/uploads
+    depends_on:
+      - db
+    networks:
+      - upmizik_network
+
+  # 2. Baz Done MySQL
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_secure_pass_2026
+      MYSQL_DATABASE: upmizik_db
+      MYSQL_USER: upmizik_user
+      MYSQL_PASSWORD: upmizik_secure_pass_2026
+    volumes:
+      - db_data:/var/lib/mysql
+      # Chaje schema inisyal la otomatikman
+      - ./backend/database/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - upmizik_network
+
+volumes:
+  db_data:
+  uploads_data:
+
+networks:
+  upmizik_network:
+    driver: bridge
