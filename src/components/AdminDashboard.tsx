@@ -9671,12 +9671,191 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">Vil Rezidans</label>
-                xœì™ÿnÛ6ÇÿÏS¼aq¶Êv§[S;­ë¤@Ğ¦ğ’,P-Ñ6+ŠHÊ?ô}Òû
-~±$;‘m:K­5u‹è+¢Ä#y÷ùO
-@‰02`9Ì(¤õ‚¡CS°ŞïÑúe@DDxC¦M“™<››­]¤höˆèb¯"İ‚ú>hjçúiÉÕ¥¦”°e·râÒäUõÂawZãÏF†Š
-mŸ­Ë‰ÖoI€K8ˆshww?Uv+¿WÈ´¥BS““3è1CËï*¥Ç»Ğ‘n¤÷&wHĞÆßj¥JFÂ£3äÒ.„#gO±Çœ¡NÏ‰%‘áLPGHAmÓ+ï/4ÖÊëïo,¶'Í‹&jœ´)Ï.³Í¥ë_Ï¦#…qÚè°´Esb¨³ƒëÚÎãÂşëñgZGoá”úLÅs.V¡Ùc-øµVNl[Gı/|BœÎ ]gJ@†o¨èš^ı²j³²yÃî+"öx{§º†p%‘¤ßf'DcôÙæ‡«/JK'R‡™ÄÀŠÔ$‹…tá¿À¹ôdgŠxL¤_ñ5$jı9:ÎFäşQ:Â#*\š‹§++BõRF>N}R…Ğà¤qüš2
-ÇŸ Ée4şô€Ö
-h³(LhÄqbş½uÎ4“¹6¶ÔÂªå“ÄàIª"#LMT€ÆD¥ÇW¨0x"q¾"éj¦N™IÜ¯H_*Å?#ô÷Ö½Á•—‡­Ä@®PSD¯Bà¤T*ıø$e£ƒ=WrG‡D8Û…¯ÀØ_'oà•4ZJv‡b£O0\¹ ‹Ô½[K‡ËYjaÊzÆ„z¯\féR]Š„ÆÛºWreP~ máø@k©ñUZ4®A~®–>©î‹6„\vr½ÆXƒõfí%É®"–Ôc·Áw'Š«ÿ•èúåÎ?1¼d2[Ø}•½ÒÇÊÀ_ù€¯6Iõå5_ñ¢¼ÿ.öNPT³ë\‘	m’@ñE¤©hâşê±›Ñs½DNŒ¬ÀÚ!ƒØÔÀšÓ´1ÿLúßÚàĞ9ØI-¬
-IzÿøÔÜëVw6`Æ kÊğ÷·j2~ªR+c•vàj®G®Ğâ!&yÃàH0="¤Q ·a57Ã®bÄ?NT;ÛĞ%¡³cªe²—…§C@/Úq©ˆ‹lÉaA7RZ*'”,yÔ("43L
-‡`Ìğ³Ôââ"õz6C*<&º›€#i¨w+•òvfÂ·íVRw¥-è®MØKºÍ3•é"ëadhsë£İ·j3>R}ÆÿvÜãC$î_\íò©¬G,ÎíQ×§Şl°¹Ò.İøÈä[*H¯-IÉd2bP|´lâ™¥G­™(b&GT¡çT·ô‰%—í2£'Mkª°ßˆ¿a ØJ×‚)9îº„ÿ©®ÖNÄ5¬O§â U„{sòÈ¶N2mû±$’z#‡B&îÌ-‰¯­x9M¦\N¿JÎ	g…¦ğÖ$ß…Šdiw“‹í–µn·6Û7ÛùlQjï#mXgä °Ó]Bƒ.™Pmğ®üqaÙ÷jíÈ),kHNoÛ‚†ŒpæúDN{rĞğ¼,)ÇÒ#¼Ø!\ÛK©Ì
-±©NË˜Åäa+z²OÕjúfO.æ	kÌ³É©,¢³Åµ!§–°¦^úrïê¨0k™;ë˜'6ÇtnœaÇHGAGÉà¦H lK/àEêªÌÕëÆëçv§ŞjcuëÏ—fèBİ#8¼;ık¦J™ËçKö†»ù¹Öâ‘şRÉ¿V«Ã´Fl¤_›î*‹2kåTA¶mî¡™Ë	İ×m[Ï6>>ÛØ ÃP*íˆhxD÷Ú’(ïÙÆ¿   ÿÿ >åŠO
+                  <input
+                    type="text"
+                    value={manualArtistCity ?? ''}
+                    onChange={(e) => setManualArtistCity(e.target.value)}
+                    placeholder="Eg: PÃ²toprens"
+                    className="w-full bg-[#05070a] border border-white/[0.15] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">KÃ²d PIN Sekirite (4 Chif) *</label>
+                  <input
+                    type="password"
+                    maxLength={4}
+                    value={manualArtistPin ?? ''}
+                    onChange={(e) => setManualArtistPin(e.target.value)}
+                    placeholder="Eg: 1234"
+                    className="w-full bg-[#05070a] border border-white/[0.15] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Rasin Mizikal</label>
+                  <input
+                    type="text"
+                    value={manualArtistRoots ?? ''}
+                    onChange={(e) => setManualArtistRoots(e.target.value)}
+                    placeholder="Eg: Mizik Rasin & Vodou TradisyonÃ¨l"
+                    className="w-full bg-[#05070a] border border-white/[0.15] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Enfliyan Mizikal</label>
+                  <input
+                    type="text"
+                    value={manualArtistInfluences ?? ''}
+                    onChange={(e) => setManualArtistInfluences(e.target.value)}
+                    placeholder="Eg: Boukman Eksperyans, RAM, CoupÃ© ClouÃ©"
+                    className="w-full bg-[#05070a] border border-white/[0.15] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Vizyon Atistik</label>
+                  <input
+                    type="text"
+                    value={manualArtistVision ?? ''}
+                    onChange={(e) => setManualArtistVision(e.target.value)}
+                    placeholder="Eg: Pote mizik ayisyen sou sÃ¨n entÃ¨nasyonal"
+                    className="w-full bg-[#05070a] border border-white/[0.15] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Sitasyon Favori (Quote)</label>
+                  <input
+                    type="text"
+                    value={manualArtistQuote ?? ''}
+                    onChange={(e) => setManualArtistQuote(e.target.value)}
+                    placeholder="Eg: Mizik se nanm pÃ¨p la..."
+                    className="w-full bg-[#05070a] border border-white/[0.15] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-300 mb-1">URL Foto Profil (Avatar)</label>
+                  <input
+                    type="url"
+                    value={manualArtistAvatar ?? ''}
+                    onChange={(e) => setManualArtistAvatar(e.target.value)}
+                    placeholder="https://images.unsplash.com/..."
+                    className="w-full bg-[#05070a] border border-white/[0.15] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-300 mb-1">URL PrÃ¨v Peman $4.99 oswa ID</label>
+                  <input
+                    type="url"
+                    value={manualArtistProof ?? ''}
+                    onChange={(e) => setManualArtistProof(e.target.value)}
+                    placeholder="https://images.unsplash.com/..."
+                    className="w-full bg-[#05070a] border border-white/[0.15] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Biyografi Atis</label>
+                  <textarea
+                    rows={3}
+                    value={manualArtistBio ?? ''}
+                    onChange={(e) => setManualArtistBio(e.target.value)}
+                    placeholder="Ekri kÃ¨k liy sou karyÃ¨ ak istwa atis la..."
+                    className="w-full bg-[#05070a] border border-white/[0.15] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Instagram (@username)</label>
+                  <input
+                    type="text"
+                    value={manualArtistInstagram ?? ''}
+                    onChange={(e) => setManualArtistInstagram(e.target.value)}
+                    placeholder="@nom_instagram"
+                    className="w-full bg-[#05070a] border border-white/[0.15] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">TikTok (@username)</label>
+                  <input
+                    type="text"
+                    value={manualArtistTiktok ?? ''}
+                    onChange={(e) => setManualArtistTiktok(e.target.value)}
+                    placeholder="@nom_tiktok"
+                    className="w-full bg-[#05070a] border border-white/[0.15] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Twitter / X (@username)</label>
+                  <input
+                    type="text"
+                    value={manualArtistTwitter ?? ''}
+                    onChange={(e) => setManualArtistTwitter(e.target.value)}
+                    placeholder="@nom_twitter"
+                    className="w-full bg-[#05070a] border border-white/[0.15] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-300 mb-2">Estati Inisyal Dosye a</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className={"flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all " + (manualArtistStatus === 'pending' ? 'bg-amber-500/20 border-amber-500/50 text-amber-300' : 'bg-[#05070a] border-white/[0.1] text-slate-400')}>
+                      <input
+                        type="radio"
+                        name="manualArtistStatus"
+                        value="pending"
+                        checked={manualArtistStatus === 'pending'}
+                        onChange={() => setManualArtistStatus('pending')}
+                        className="sr-only"
+                      />
+                      <Clock className="w-4 h-4" />
+                      <span className="text-xs font-semibold">An Atant (Pending)</span>
+                    </label>
+
+                    <label className={"flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all " + (manualArtistStatus === 'active' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300' : 'bg-[#05070a] border-white/[0.1] text-slate-400')}>
+                      <input
+                        type="radio"
+                        name="manualArtistStatus"
+                        value="active"
+                        checked={manualArtistStatus === 'active'}
+                        onChange={() => setManualArtistStatus('active')}
+                        className="sr-only"
+                      />
+                      <CheckCircle className="w-4 h-4" />
+                      <span className="text-xs font-semibold">Valide DirÃ¨kteman (Active)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/[0.08]">
+                <button
+                  type="button"
+                  onClick={() => setShowAddManualArtistModal(false)}
+                  className="px-4 py-2.5 rounded-xl border border-white/[0.15] hover:bg-white/[0.06] text-slate-300 text-xs font-semibold transition-colors"
+                >
+                  Anile
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  Kreye Dosye Atis la
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default AdminDashboard;
