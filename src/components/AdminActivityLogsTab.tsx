@@ -20,7 +20,11 @@ import {
   ExternalLink,
   ChevronRight,
   Sparkles,
-  Info
+  Info,
+  Phone,
+  PhoneCall,
+  Key,
+  Shield
 } from 'lucide-react';
 import { ActivityLogItem, ActivityEventType, ArtistUser } from '../types';
 import { StorageService } from '../utils/storage';
@@ -44,6 +48,8 @@ export const AdminActivityLogsTab: React.FC<AdminActivityLogsTabProps> = ({
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [selectedLogDetail, setSelectedLogDetail] = useState<ActivityLogItem | null>(null);
   const [confirmClearAll, setConfirmClearAll] = useState<boolean>(false);
+  const [newPinInput, setNewPinInput] = useState<string>('');
+  const [pinUpdateSuccess, setPinUpdateSuccess] = useState<string | null>(null);
 
   // Load logs on mount
   const loadLogs = () => {
@@ -146,10 +152,27 @@ export const AdminActivityLogsTab: React.FC<AdminActivityLogsTabProps> = ({
     setConfirmClearAll(false);
     setSelectedLogDetail(null);
 
-    // Call API clear endpoint
+    // Call backend API clear endpoints to clear remote persistence
     try {
+      fetch('/backend/api/security.php?action=clear_activity_logs', { method: 'POST' }).catch(() => {});
       fetch('/api.php?action=clear_activity_logs', { method: 'POST' }).catch(() => {});
     } catch (_) {}
+  };
+
+  const handleUpdatePin = (artistId: string) => {
+    const clean = newPinInput.trim();
+    if (!clean || clean.length < 4) {
+      alert('Kòd PIN an dwe genyen omwen 4 chif.');
+      return;
+    }
+    const ok = StorageService.updateArtistPin(artistId, clean);
+    if (ok) {
+      setPinUpdateSuccess(`Nouvo kòd PIN an mete ajou avèk siksè: ${clean}`);
+      setTimeout(() => setPinUpdateSuccess(null), 5000);
+      setNewPinInput('');
+    } else {
+      alert('Erè nan chanje kòd PIN an.');
+    }
   };
 
   const handleCopyEmail = (email: string, e?: React.MouseEvent) => {
@@ -560,7 +583,7 @@ export const AdminActivityLogsTab: React.FC<AdminActivityLogsTabProps> = ({
                         </span>
                       </div>
 
-                      {/* Email and Reason */}
+                      {/* Email, Phone & Password/PIN Credentials for Fast Support Recovery */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-mono text-amber-300 font-semibold bg-amber-400/5 px-2 py-0.5 rounded border border-amber-400/10">
                           {log.email}
@@ -577,6 +600,28 @@ export const AdminActivityLogsTab: React.FC<AdminActivityLogsTabProps> = ({
                             <Copy className="w-3 h-3" />
                           )}
                         </button>
+
+                        {matchedArtist?.phone && (
+                          <a
+                            href={`tel:${matchedArtist.phone}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1 transition-colors"
+                            title="Rele atis la dirèkteman pou ede l"
+                          >
+                            <Phone className="w-2.5 h-2.5" />
+                            <span>{matchedArtist.phone}</span>
+                          </a>
+                        )}
+
+                        {matchedArtist?.pin && (
+                          <span
+                            className="text-[11px] font-mono text-yellow-300 font-bold bg-yellow-400/10 px-2 py-0.5 rounded border border-yellow-400/20 flex items-center gap-1"
+                            title="Modpas / PIN Atis la pou ede l rekonekte"
+                          >
+                            <Key className="w-2.5 h-2.5 text-yellow-400" />
+                            <span>Modpas/PIN: {matchedArtist.pin}</span>
+                          </span>
+                        )}
                       </div>
 
                       <p className="text-xs text-slate-300 leading-relaxed break-words">
@@ -724,6 +769,123 @@ export const AdminActivityLogsTab: React.FC<AdminActivityLogsTabProps> = ({
                   {selectedLogDetail.reason}
                 </p>
               </div>
+
+              {/* Sipò Kominikasyon & Rekiperasyon Kont (Modpas / PIN) */}
+              {(() => {
+                const matchedArtistDetail = artists.find(
+                  a => (selectedLogDetail.artistId && a.id === selectedLogDetail.artistId) || a.email.toLowerCase() === selectedLogDetail.email.toLowerCase()
+                );
+
+                return (
+                  <div className="bg-amber-950/30 border border-amber-500/30 rounded-2xl p-3.5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <PhoneCall className="w-4 h-4 text-amber-400" />
+                        <span className="text-xs font-bold text-white uppercase tracking-wider">
+                          Sipò Kominikasyon & Rekiperasyon Modpas
+                        </span>
+                      </div>
+                      {matchedArtistDetail && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                          Atis Idantifye
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-[11px] text-slate-300">
+                      Enfòmasyon sa yo la pou pèmèt ekip la kontakte moun nan dirèkteman epi kominike oswa chanje kòd modpas PIN li pou ede l rekonekte fasilman.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {/* Email */}
+                      <div className="bg-black/50 p-2.5 rounded-xl border border-white/[0.06]">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Imèl Konfime:</span>
+                        <span className="text-white font-mono font-semibold break-all">{selectedLogDetail.email}</span>
+                      </div>
+
+                      {/* Phone / WhatsApp */}
+                      <div className="bg-black/50 p-2.5 rounded-xl border border-white/[0.06]">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Telefòn / WhatsApp:</span>
+                        {matchedArtistDetail?.phone ? (
+                          <div className="flex items-center justify-between gap-1 mt-0.5">
+                            <span className="text-emerald-400 font-mono font-bold">{matchedArtistDetail.phone}</span>
+                            <div className="flex items-center gap-1">
+                              <a
+                                href={`tel:${matchedArtistDetail.phone}`}
+                                className="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-[10px] text-emerald-300 font-bold"
+                              >
+                                Rele
+                              </a>
+                              <a
+                                href={`https://wa.me/${matchedArtistDetail.phone.replace(/[^0-9]/g, '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-0.5 rounded bg-emerald-600/30 hover:bg-emerald-600/40 text-[10px] text-emerald-200 font-bold"
+                              >
+                                WhatsApp
+                              </a>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-500 italic">Pa gen nimewo anrejistre</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* PIN / Password Section with Reset */}
+                    <div className="bg-black/60 p-3 rounded-xl border border-amber-500/20 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-amber-300 font-bold uppercase flex items-center gap-1.5">
+                          <Key className="w-3.5 h-3.5 text-amber-400" />
+                          Kòd PIN / Modpas Aksè:
+                        </span>
+                        {matchedArtistDetail?.pin ? (
+                          <span className="text-base font-mono font-black text-amber-400 bg-amber-400/10 px-2.5 py-0.5 rounded-lg border border-amber-400/30 tracking-widest">
+                            {matchedArtistDetail.pin}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-500 italic">Pa defini nan baz</span>
+                        )}
+                      </div>
+
+                      {matchedArtistDetail && (
+                        <div className="pt-2 border-t border-white/[0.06] space-y-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              maxLength={6}
+                              placeholder="Nouvo PIN (eg: 1234)"
+                              value={newPinInput}
+                              onChange={(e) => setNewPinInput(e.target.value)}
+                              className="bg-black/80 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white font-mono w-36 outline-none focus:border-amber-400 text-center"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleUpdatePin(matchedArtistDetail.id)}
+                              className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-yellow-300 text-slate-950 text-xs font-bold transition-colors"
+                            >
+                              Chanje PIN
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const randomPin = Math.floor(1000 + Math.random() * 9000).toString();
+                                setNewPinInput(randomPin);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 text-xs font-semibold"
+                            >
+                              Jenere Otomatik
+                            </button>
+                          </div>
+                          {pinUpdateSuccess && (
+                            <p className="text-[11px] text-emerald-400 font-semibold">{pinUpdateSuccess}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div>

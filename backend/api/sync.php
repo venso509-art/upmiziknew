@@ -5,7 +5,8 @@
  * Pèmèt migrasyon ak senkronizasyon tout done inisyal yo dirèkteman nan MySQL
  */
 
-require_once __DIR__ . '/../config/db.php';
+require_once dirname(__DIR__) . '/middleware/cors.php';
+require_once dirname(__DIR__) . '/config/database.php';
 
 $pdo = getDBConnection();
 $method = $_SERVER['REQUEST_METHOD'];
@@ -14,30 +15,41 @@ if ($method !== 'POST') {
     jsonResponse(['success' => false, 'message' => 'Sèlman POST aksepte pou senkronizasyon.'], 405);
 }
 
+function mapStatusToDb(string $status): string {
+    return match (strtolower($status)) {
+        'active' => 'actif',
+        'pending' => 'en_attente',
+        'rejected' => 'rejete',
+        'suspended' => 'suspendu',
+        'validated' => 'valide',
+        default => $status
+    };
+}
+
 $data = getJsonInput();
 
-// 1. Senkronize Atis yo
+// 1. Senkronize Atis yo nan `artistes`
 if (!empty($data['artists']) && is_array($data['artists'])) {
     $artStmt = $pdo->prepare("
-        INSERT INTO artists (
-            id, name, stageName, email, phone, city, pin, avatarUrl, bio,
-            musicalRoots, musicalInfluences, artisticVision, artistQuote,
-            status, registrationProofUrl, registrationDate, totalListens, totalDonationsReceived,
-            headerBannerUrl, bannerGenreTheme, isPaidThisMonth
+        INSERT INTO artistes (
+            id, nom_complet, nom_scene, email, telephone, ville, pin, avatar_url, bio,
+            racines_musicales, influences, vision_artistique, citation,
+            statut, preuve_inscription_url, date_inscription, total_ecoutes, total_dons_recus,
+            banniere_url, theme_banniere, paye_ce_mois
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
-            name = VALUES(name),
-            stageName = VALUES(stageName),
-            phone = VALUES(phone),
-            city = VALUES(city),
+            nom_complet = VALUES(nom_complet),
+            nom_scene = VALUES(nom_scene),
+            telephone = VALUES(telephone),
+            ville = VALUES(ville),
             pin = VALUES(pin),
-            avatarUrl = VALUES(avatarUrl),
+            avatar_url = VALUES(avatar_url),
             bio = VALUES(bio),
-            status = VALUES(status),
-            totalListens = VALUES(totalListens),
-            totalDonationsReceived = VALUES(totalDonationsReceived),
-            headerBannerUrl = VALUES(headerBannerUrl),
-            isPaidThisMonth = VALUES(isPaidThisMonth)
+            statut = VALUES(statut),
+            total_ecoutes = VALUES(total_ecoutes),
+            total_dons_recus = VALUES(total_dons_recus),
+            banniere_url = VALUES(banniere_url),
+            paye_ce_mois = VALUES(paye_ce_mois)
     ");
 
     foreach ($data['artists'] as $a) {
@@ -55,7 +67,7 @@ if (!empty($data['artists']) && is_array($data['artists'])) {
             $a['musicalInfluences'] ?? null,
             $a['artisticVision'] ?? null,
             $a['artistQuote'] ?? null,
-            $a['status'] ?? 'active',
+            mapStatusToDb($a['status'] ?? 'active'),
             $a['registrationProofUrl'] ?? null,
             $a['registrationDate'] ?? date('Y-m-d H:i:s'),
             $a['totalListens'] ?? 0,
@@ -67,36 +79,39 @@ if (!empty($data['artists']) && is_array($data['artists'])) {
     }
 }
 
-// 2. Senkronize Mizik yo
+// 2. Senkronize Mizik yo nan `musiques`
 if (!empty($data['musics']) && is_array($data['musics'])) {
     $musStmt = $pdo->prepare("
-        INSERT INTO musics (
-            id, title, artistId, artistName, feat, category, releaseFormat,
-            albumName, trackNumber, coverUrl, audioUrl, duration,
-            listens, totalDonations, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO musiques (
+            id, titre, artiste_id, nom_artiste, featuring, categorie, format,
+            nom_album, numero_piste, cover_url, audio_url, duree,
+            ecoutes, total_dons, statut, date_creation
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         ON DUPLICATE KEY UPDATE
-            title = VALUES(title),
-            artistName = VALUES(artistName),
-            feat = VALUES(feat),
-            category = VALUES(category),
-            releaseFormat = VALUES(releaseFormat),
-            coverUrl = VALUES(coverUrl),
-            audioUrl = VALUES(audioUrl),
-            duration = VALUES(duration),
-            listens = VALUES(listens),
-            totalDonations = VALUES(totalDonations),
-            status = VALUES(status)
+            titre = VALUES(titre),
+            nom_artiste = VALUES(nom_artiste),
+            featuring = VALUES(featuring),
+            categorie = VALUES(categorie),
+            format = VALUES(format),
+            nom_album = VALUES(nom_album),
+            numero_piste = VALUES(numero_piste),
+            cover_url = VALUES(cover_url),
+            audio_url = VALUES(audio_url),
+            duree = VALUES(duree),
+            ecoutes = VALUES(ecoutes),
+            total_dons = VALUES(total_dons),
+            statut = VALUES(statut)
     ");
 
     foreach ($data['musics'] as $m) {
         // Asire atis la egziste dabò pou evite foreign key constraint error
-        $chk = $pdo->prepare("SELECT id FROM artists WHERE id = ?");
+        $chk = $pdo->prepare("SELECT id FROM artistes WHERE id = ?");
         $chk->execute([$m['artistId']]);
         if (!$chk->fetch()) {
             $createArt = $pdo->prepare("
-                INSERT INTO artists (id, name, stageName, email, phone, status)
-                VALUES (?, ?, ?, ?, '50900000000', 'active')
+                INSERT INTO artistes (id, nom_complet, nom_scene, email, telephone, statut, date_inscription)
+                VALUES (?, ?, ?, ?, '50900000000', 'actif', NOW())
+                ON DUPLICATE KEY UPDATE nom_scene = VALUES(nom_scene), statut = 'actif'
             ");
             $createArt->execute([
                 $m['artistId'],
@@ -106,6 +121,10 @@ if (!empty($data['musics']) && is_array($data['musics'])) {
             ]);
         }
 
+        $rawFormat = strtolower($m['releaseFormat'] ?? $m['format'] ?? 'single');
+        $validFormats = ['single', 'album', 'ep', 'mixtape', 'demo'];
+        $format = in_array($rawFormat, $validFormats) ? $rawFormat : 'single';
+
         $musStmt->execute([
             $m['id'],
             $m['title'],
@@ -113,31 +132,31 @@ if (!empty($data['musics']) && is_array($data['musics'])) {
             $m['artistName'] ?? 'Atis',
             $m['feat'] ?? null,
             $m['category'] ?? 'Tout',
-            $m['releaseFormat'] ?? 'single',
-            $m['albumName'] ?? null,
+            $format,
+            $m['albumName'] ?? $m['album_id'] ?? null,
             $m['trackNumber'] ?? 1,
             $m['coverUrl'],
             $m['audioUrl'],
             $m['duration'] ?? 180,
             $m['listens'] ?? 0,
             $m['totalDonations'] ?? 0,
-            $m['status'] ?? 'active'
+            mapStatusToDb($m['status'] ?? 'active')
         ]);
     }
 }
 
-// 3. Senkronize Piblisite (Pubs)
+// 3. Senkronize Piblisite nan `publicites`
 if (!empty($data['pubs']) && is_array($data['pubs'])) {
     $pubStmt = $pdo->prepare("
-        INSERT INTO pubs (id, title, description, imageUrl, linkUrl, active, sponsorName)
+        INSERT INTO publicites (id, titre, description, image_url, lien_url, actif, nom_sponsor)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
-            title = VALUES(title),
+            titre = VALUES(titre),
             description = VALUES(description),
-            imageUrl = VALUES(imageUrl),
-            linkUrl = VALUES(linkUrl),
-            active = VALUES(active),
-            sponsorName = VALUES(sponsorName)
+            image_url = VALUES(image_url),
+            lien_url = VALUES(lien_url),
+            actif = VALUES(actif),
+            nom_sponsor = VALUES(nom_sponsor)
     ");
     foreach ($data['pubs'] as $p) {
         $pubStmt->execute([
@@ -152,32 +171,15 @@ if (!empty($data['pubs']) && is_array($data['pubs'])) {
     }
 }
 
-// 4. Senkronize RPA
+// 4. Senkronize RPA nan `configurations`
 if (!empty($data['rpa']) && is_array($data['rpa'])) {
+    $rpaJson = json_encode($data['rpa'], JSON_UNESCAPED_UNICODE);
     $rpaStmt = $pdo->prepare("
-        INSERT INTO rpa (id, title, description, artistName, imageUrl, socialLink, youtubeUrl, badgeText)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            title = VALUES(title),
-            description = VALUES(description),
-            artistName = VALUES(artistName),
-            imageUrl = VALUES(imageUrl),
-            socialLink = VALUES(socialLink),
-            youtubeUrl = VALUES(youtubeUrl),
-            badgeText = VALUES(badgeText)
+        INSERT INTO configurations (cle, valeur, description)
+        VALUES ('rpa_items', ?, 'Lis pwojè ak revelasyon atis (RPA)')
+        ON DUPLICATE KEY UPDATE valeur = VALUES(valeur)
     ");
-    foreach ($data['rpa'] as $r) {
-        $rpaStmt->execute([
-            $r['id'],
-            $r['title'],
-            $r['description'] ?? '',
-            $r['artistName'],
-            $r['imageUrl'],
-            $r['socialLink'] ?? '#',
-            $r['youtubeUrl'] ?? null,
-            $r['badgeText'] ?? 'Révélation'
-        ]);
-    }
+    $rpaStmt->execute([$rpaJson]);
 }
 
 jsonResponse(['success' => true, 'message' => 'Tout done yo senkronize avèk siksè nan MySQL!']);

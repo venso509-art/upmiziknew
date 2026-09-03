@@ -109,6 +109,19 @@ export const AdminSecurityTab: React.FC = () => {
   const handleDeleteLog = (id: string) => {
     if (window.confirm('Èske w vle efase rapò alèt sa a?')) {
       StorageService.deleteIntrusionLog(id);
+      try {
+        fetch(`/backend/api/security.php?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+      } catch (_) {}
+      loadData();
+    }
+  };
+
+  const handleClearAllIntrusionLogs = () => {
+    if (window.confirm('Èske w sèten ou vle efase tout rapò alèt entrizyon yo nèt?')) {
+      StorageService.clearIntrusionLogs();
+      try {
+        fetch('/backend/api/security.php?action=clear', { method: 'POST' }).catch(() => {});
+      } catch (_) {}
       loadData();
     }
   };
@@ -376,13 +389,25 @@ export const AdminSecurityTab: React.FC = () => {
             </div>
           </div>
 
-          <button
-            onClick={loadData}
-            className="self-start sm:self-auto px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-xs text-slate-300 flex items-center gap-1.5 transition-colors"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Aktyalize</span>
-          </button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {logs.length > 0 && (
+              <button
+                onClick={handleClearAllIntrusionLogs}
+                className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 text-xs flex items-center gap-1.5 transition-colors"
+                title="Efase tout rapò alèt yo nèt"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Netwaye Tout Alèt Yo</span>
+              </button>
+            )}
+            <button
+              onClick={loadData}
+              className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-xs text-slate-300 flex items-center gap-1.5 transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Aktyalize</span>
+            </button>
+          </div>
         </div>
 
         {logs.length === 0 ? (

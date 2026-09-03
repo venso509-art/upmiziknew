@@ -1,9 +1,10 @@
 <?php
 /**
- * UpMizik - Artist Inbox API Endpoint (Hostinger / MySQL)
+ * UpMizik - Artist Inbox API Endpoint (Hostinger / MySQL / messages_inbox)
  */
 
-require_once __DIR__ . '/../config/db.php';
+require_once dirname(__DIR__) . '/middleware/cors.php';
+require_once dirname(__DIR__) . '/config/database.php';
 
 $pdo = getDBConnection();
 $method = $_SERVER['REQUEST_METHOD'];
@@ -18,25 +19,29 @@ if ($method === 'GET') {
     }
 
     $stmt = $pdo->prepare("
-        SELECT * FROM artist_inbox 
-        WHERE artistId = ? 
-        ORDER BY receivedAt DESC
+        SELECT 
+            id,
+            artiste_id AS artistId,
+            titre AS subject,
+            message AS bodyText,
+            message AS previewText,
+            expediteur AS senderName,
+            expediteur AS senderEmail,
+            est_lu AS isRead,
+            0 AS isStarred,
+            type,
+            date_envoi AS receivedAt
+        FROM messages_inbox 
+        WHERE artiste_id = ? 
+        ORDER BY date_envoi DESC
     ");
     $stmt->execute([$artistId]);
     $messages = $stmt->fetchAll();
 
     foreach ($messages as &$msg) {
         $msg['isRead'] = (bool)$msg['isRead'];
-        $msg['isStarred'] = (bool)$msg['isStarred'];
-        if (!empty($msg['musicDetails'])) {
-            $msg['musicDetails'] = json_decode($msg['musicDetails'], true);
-        }
-        if (!empty($msg['awardDetails'])) {
-            $msg['awardDetails'] = json_decode($msg['awardDetails'], true);
-        }
-        if (!empty($msg['donationDetails'])) {
-            $msg['donationDetails'] = json_decode($msg['donationDetails'], true);
-        }
+        $msg['isStarred'] = false;
+        $msg['previewText'] = mb_substr(strip_tags($msg['bodyText']), 0, 80);
     }
 
     jsonResponse(['success' => true, 'messages' => $messages, 'count' => count($messages)]);
@@ -51,40 +56,28 @@ if ($method === 'POST') {
         jsonResponse(['success' => false, 'message' => 'artistId ak subject obligatwa.'], 400);
     }
 
-    $id = !empty($data['id']) ? $data['id'] : 'msg_' . time() . '_' . bin2hex(random_bytes(3));
+    $id = !empty($data['id']) ? $data['id'] : ('msg_' . time() . '_' . bin2hex(random_bytes(3)));
     $artistId = $data['artistId'];
-    $artistName = $data['artistName'] ?? 'Atis';
-    $artistEmail = $data['artistEmail'] ?? '';
-    $type = $data['type'] ?? 'system_alert';
-    $subject = $data['subject'];
+    $subject = trim($data['subject']);
+    $bodyText = $data['bodyText'] ?? $data['message'] ?? $data['previewText'] ?? '';
     $senderName = $data['senderName'] ?? 'Ekip UpMizik';
-    $senderEmail = $data['senderEmail'] ?? 'admin@upmizik.com';
-    $recipientEmail = $data['recipientEmail'] ?? $artistEmail;
-    $previewText = $data['previewText'] ?? substr($data['bodyText'] ?? '', 0, 80);
-    $bodyText = $data['bodyText'] ?? '';
-    $musicDetails = !empty($data['musicDetails']) ? json_encode($data['musicDetails'], JSON_UNESCAPED_UNICODE) : null;
-    $awardDetails = !empty($data['awardDetails']) ? json_encode($data['awardDetails'], JSON_UNESCAPED_UNICODE) : null;
-    $donationDetails = !empty($data['donationDetails']) ? json_encode($data['donationDetails'], JSON_UNESCAPED_UNICODE) : null;
+    $type = $data['type'] ?? 'info';
 
     $stmt = $pdo->prepare("
-        INSERT INTO artist_inbox (
-            id, artistId, artistName, artistEmail, type, subject,
-            senderName, senderEmail, recipientEmail, previewText, bodyText,
-            musicDetails, awardDetails, donationDetails, isRead, isStarred
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+        INSERT INTO messages_inbox (
+            id, artiste_id, titre, message, expediteur, est_lu, type, date_envoi
+        ) VALUES (?, ?, ?, ?, ?, 0, ?, NOW())
     ");
 
     $stmt->execute([
-        $id, $artistId, $artistName, $artistEmail, $type, $subject,
-        $senderName, $senderEmail, $recipientEmail, $previewText, $bodyText,
-        $musicDetails, $awardDetails, $donationDetails
+        $id, $artistId, $subject, $bodyText, $senderName, $type
     ]);
 
     jsonResponse(['success' => true, 'message' => 'Mesaj voye avèk siksè.', 'messageId' => $id], 201);
 }
 
 // ----------------------------------------------------------
-// PUT: Make mesaj kòm Li (isRead) oswa Starred
+// PUT: Make mesaj kòm Li (isRead)
 // ----------------------------------------------------------
 if ($method === 'PUT') {
     $data = getJsonInput();
@@ -93,21 +86,9 @@ if ($method === 'PUT') {
         jsonResponse(['success' => false, 'message' => 'ID mesaj la obligatwa.'], 400);
     }
 
-    $updates = [];
-    $params = [];
     if (isset($data['isRead'])) {
-        $updates[] = "isRead = ?";
-        $params[] = $data['isRead'] ? 1 : 0;
-    }
-    if (isset($data['isStarred'])) {
-        $updates[] = "isStarred = ?";
-        $params[] = $data['isStarred'] ? 1 : 0;
-    }
-
-    if (!empty($updates)) {
-        $params[] = $id;
-        $stmt = $pdo->prepare("UPDATE artist_inbox SET " . implode(', ', $updates) . " WHERE id = ?");
-        $stmt->execute($params);
+        $stmt = $pdo->prepare("UPDATE messages_inbox SET est_lu = ? WHERE id = ?");
+        $stmt->execute([$data['isRead'] ? 1 : 0, $id]);
     }
 
     jsonResponse(['success' => true, 'message' => 'Mesaj aktyalize.']);
@@ -121,7 +102,9 @@ if ($method === 'DELETE') {
     if (!$id) {
         jsonResponse(['success' => false, 'message' => 'ID mesaj la obligatwa.'], 400);
     }
-    $stmt = $pdo->prepare("DELETE FROM artist_inbox WHERE id = ?");
+    $stmt = $pdo->prepare("DELETE FROM messages_inbox WHERE id = ?");
     $stmt->execute([$id]);
     jsonResponse(['success' => true, 'message' => 'Mesaj efase avèk siksè.']);
 }
+
+jsonResponse(['success' => false, 'message' => 'Metòd sa a pa sipòte.'], 405);

@@ -120,16 +120,32 @@ export default function App() {
   const [showFontModal, setShowFontModal] = useState(false);
 
   // Apply selected font to body and document root
+  const applyFontStyles = (font: typeof FONT_OPTIONS[0]) => {
+    const title = font.titleFont || font.fontFamilyCSS;
+    const body = font.bodyFont || font.fontFamilyCSS;
+    document.documentElement.style.setProperty('--app-font-family', body);
+    document.documentElement.style.setProperty('--app-font-title', title);
+    document.body.style.setProperty('--app-font-family', body);
+    document.body.style.setProperty('--app-font-title', title);
+    document.body.style.fontFamily = body;
+    const rootEl = document.getElementById('root');
+    if (rootEl) {
+      rootEl.style.setProperty('--app-font-family', body);
+      rootEl.style.setProperty('--app-font-title', title);
+      rootEl.style.fontFamily = body;
+    }
+  };
+
   useEffect(() => {
     const found = FONT_OPTIONS.find((f) => f.id === selectedFontId) || FONT_OPTIONS[0];
-    document.body.style.fontFamily = found.fontFamilyCSS;
+    applyFontStyles(found);
     localStorage.setItem('upmizik_font_id', selectedFontId.toString());
   }, [selectedFontId]);
 
   const handleSelectFont = (font: typeof FONT_OPTIONS[0]) => {
     setSelectedFontId(font.id);
-    document.body.style.fontFamily = font.fontFamilyCSS;
-    addToast('success', `✨ Stil ekriti #${font.id} "${font.name}" aplike avèk siksè!`);
+    applyFontStyles(font);
+    addToast('success', `✨ Stil ekriti #${font.id} "${font.name}" adapte avèk siksè sou tout sit la!`);
   };
 
   // Global Theme Mode (Atmospheric Night vs High Contrast Light)
@@ -277,10 +293,12 @@ export default function App() {
     // Cloud Firestore Sync in background
     (async () => {
       try {
-        const [cloudMusic, cloudArtists, cloudPosts] = await Promise.all([
+        const [cloudMusic, cloudArtists, cloudPosts, cloudRpa, cloudPubs] = await Promise.all([
           HostingerService.fetchMusic(),
           HostingerService.fetchArtists(),
-          HostingerService.fetchSocialPosts()
+          HostingerService.fetchSocialPosts(),
+          HostingerService.fetchRpa(),
+          HostingerService.fetchPubs()
         ]);
 
         if (cloudMusic && cloudMusic.length > 0) {
@@ -327,6 +345,16 @@ export default function App() {
           StorageService.saveSocialPosts(cloudPosts);
         } else if (localSocial.length > 0) {
           HostingerService.syncSocialPosts(localSocial);
+        }
+
+        if (cloudRpa && cloudRpa.length > 0) {
+          setRpaList(cloudRpa);
+          StorageService.saveRpa(cloudRpa);
+        }
+
+        if (cloudPubs && cloudPubs.length > 0) {
+          setPubs(cloudPubs);
+          StorageService.savePubs(cloudPubs);
         }
       } catch {
         // Hostinger VPS background sync deferred silently in local / sandboxed mode
@@ -420,11 +448,31 @@ export default function App() {
       }
     });
 
+    const unsubRpa = HostingerService.subscribeToRpa((cloudRpa) => {
+      if (cloudRpa && cloudRpa.length > 0) {
+        setRpaList(cloudRpa);
+        StorageService.saveRpa(cloudRpa);
+      }
+    });
+
+    const unsubPubs = HostingerService.subscribeToPubs((cloudPubs) => {
+      if (cloudPubs && cloudPubs.length > 0) {
+        setPubs(cloudPubs);
+        StorageService.savePubs(cloudPubs);
+      }
+    });
+
+    // Mekanis Socket / Refetch Otomatik pou Mizik ak Done sou Hostinger MySQL
+    const unsubAutoRefetch = HostingerService.startAutoRefetch(8000);
+
     return () => {
       unsubArtists();
       unsubDonations();
       unsubMusic();
       unsubPosts();
+      unsubRpa();
+      unsubPubs();
+      unsubAutoRefetch();
     };
   }, []);
 
@@ -461,6 +509,7 @@ export default function App() {
     };
 
     window.addEventListener('storage', handleSync);
+    window.addEventListener('upmizik_data_sync', handleSync);
     window.addEventListener('upmizik_music_updated', handleSync);
     window.addEventListener('upmizik_artist_updated', handleSync);
     window.addEventListener('upmizik_donation_updated', handleSync);
@@ -468,6 +517,7 @@ export default function App() {
 
     return () => {
       window.removeEventListener('storage', handleSync);
+      window.removeEventListener('upmizik_data_sync', handleSync);
       window.removeEventListener('upmizik_music_updated', handleSync);
       window.removeEventListener('upmizik_artist_updated', handleSync);
       window.removeEventListener('upmizik_donation_updated', handleSync);
@@ -878,7 +928,7 @@ export default function App() {
   };
 
   // Add Music Handler (Artist & Admin)
-  const handleAddNewSong = (songData: Omit<MusicItem, 'id' | 'listens' | 'totalDonations' | 'createdAt'>) => {
+  const handleAddNewSong = async (songData: Omit<MusicItem, 'id' | 'listens' | 'totalDonations' | 'createdAt'>) => {
     const newSong: MusicItem = {
       ...songData,
       id: `music-${Date.now()}`,
@@ -889,13 +939,25 @@ export default function App() {
       commentsCount: 0,
       sharesCount: 0
     };
+
+    // 1. Mete ajou lokalman imedyatman pou itilizatè k ap poste a wè moso a touswit san reta
     StorageService.saveMusic(newSong);
-    HostingerService.saveSingleMusic(newSong);
     const updatedList = StorageService.getMusic();
     setMusicList(updatedList);
     setArtists(StorageService.getArtists());
     setRecRefreshKey(prev => prev + 1);
     addToast('success', `Moso "${newSong.title}" pibliye avèk siksè sou UpMizik!`);
+
+    // 2. Voye nan Hostinger MySQL epi difize an tan reyèl pou tout lòt itilizatè konekte
+    try {
+      await HostingerService.saveSingleMusic(newSong);
+      // Asire tout detay sèvè yo aliyen san reta
+      setTimeout(() => {
+        HostingerService.fetchMusicAndNotify(true);
+      }, 400);
+    } catch (err) {
+      console.warn('[handleAddNewSong] Hostinger sync warn:', err);
+    }
   };
 
   // Share Handler (Updates dynamic OpenGraph meta-tags, opens rich story share modal, & records metric)
@@ -1187,12 +1249,14 @@ export default function App() {
 
   const handleSavePubs = (newPubs: PubItem[]) => {
     StorageService.savePubs(newPubs);
+    HostingerService.syncPubs(newPubs);
     setPubs(newPubs);
     addToast('success', 'Piblisite yo mete ajou!');
   };
 
   const handleSaveRpa = (newRpa: RpaItem[]) => {
     StorageService.saveRpa(newRpa);
+    HostingerService.syncRpa(newRpa);
     setRpaList(newRpa);
     addToast('success', 'Ribrik Pouse Atis (RPA) mete ajou!');
   };
@@ -1220,7 +1284,7 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${
+    <div className={`min-h-screen flex flex-col transition-colors duration-200 ${
       themeMode === 'light' 
         ? 'bg-slate-50 text-slate-900 selection:bg-blue-600 selection:text-white' 
         : 'bg-slate-950 text-slate-100 selection:bg-red-500 selection:text-white'

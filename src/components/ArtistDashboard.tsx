@@ -61,7 +61,8 @@ import {
   ShieldAlert,
   Ban,
   AlertTriangle,
-  XCircle
+  XCircle,
+  Camera
 } from 'lucide-react';
 import { ArtistAnalytics } from './ArtistAnalytics';
 import { ArtistBadge } from './ArtistBadge';
@@ -71,6 +72,8 @@ import { ArtistBannerStudio } from './ArtistBannerStudio';
 import { SongCreditsEditor } from './SongCreditsEditor';
 import { ArtistRevenueEstimates } from './ArtistRevenueEstimates';
 import { StorageService } from '../utils/storage';
+import { HostingerService } from '../utils/hostingerService';
+import { UpMizikAPI } from '../utils/apiService';
 import { getArtistBadgeInfo, calculateArtistTotalDonations, TIER_THRESHOLDS } from '../utils/badgeSystem';
 import { generateArtistPortfolioPdf } from '../utils/portfolioPdfGenerator';
 import { getAudioDuration } from '../utils/audioEngine';
@@ -183,6 +186,11 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
   const [editInstagram, setEditInstagram] = useState(currentArtist.instagramHandle || '');
   const [editTiktok, setEditTiktok] = useState(currentArtist.tiktokHandle || '');
   const [editYoutube, setEditYoutube] = useState(currentArtist.youtubeUrl || '');
+  const [editAvatarPreview, setEditAvatarPreview] = useState(currentArtist.avatarUrl || '');
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarUploadMsg, setAvatarUploadMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const headerAvatarInputRef = React.useRef<HTMLInputElement>(null);
+  const profileAvatarInputRef = React.useRef<HTMLInputElement>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSaveSuccess, setProfileSaveSuccess] = useState<string | null>(null);
 
@@ -197,6 +205,7 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
     setEditInstagram(currentArtist.instagramHandle || '');
     setEditTiktok(currentArtist.tiktokHandle || '');
     setEditYoutube(currentArtist.youtubeUrl || '');
+    setEditAvatarPreview(currentArtist.avatarUrl || '');
   }, [currentArtist]);
 
   // Sync inbox messages periodically or when storage updates
@@ -205,6 +214,53 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
   }, [currentArtist.id]);
 
   const unreadInboxCount = inboxMessages.filter(m => !m.isRead).length;
+
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isArtistActive) {
+      setAvatarUploadMsg({ type: 'error', text: 'Kont ou dwe valide pa Administratè a anvan w ka chanje foto pwofil ou.' });
+      triggerBlockedAction('Chanje Foto Pwofil');
+      return;
+    }
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setIsUploadingAvatar(true);
+      setAvatarUploadMsg({ type: 'info', text: 'Foto pwofil ap prepare epi telechaje...' });
+      try {
+        const compressed = await compressAndReadFile(file, 600, 600, 0.75);
+        const localPreview = compressed || URL.createObjectURL(file);
+        setEditAvatarPreview(localPreview);
+
+        let finalUrl = localPreview;
+        try {
+          const res = await UpMizikAPI.uploadFile(file, 'avatars');
+          if (res && res.url) {
+            finalUrl = res.url;
+            setEditAvatarPreview(finalUrl);
+          }
+        } catch (uploadErr) {
+          console.warn('Server upload error, using local compressed image:', uploadErr);
+        }
+
+        const updatedArtist: ArtistUser = {
+          ...currentArtist,
+          avatarUrl: finalUrl
+        };
+        StorageService.saveArtist(updatedArtist);
+        HostingerService.saveSingleArtist(updatedArtist);
+        if (onArtistUpdated) {
+          onArtistUpdated(updatedArtist);
+        }
+        setAvatarUploadMsg({ type: 'success', text: 'Foto pwofil ou mete ajou avèk siksè sou tout sit la!' });
+        setTimeout(() => setAvatarUploadMsg(null), 4500);
+      } catch (err) {
+        console.error('Avatar upload error:', err);
+        setAvatarUploadMsg({ type: 'error', text: 'Erè pandan tretman foto a.' });
+        setTimeout(() => setAvatarUploadMsg(null), 4000);
+      } finally {
+        setIsUploadingAvatar(false);
+      }
+    }
+  };
   
   // Badge & Tier Info
   const totalCumulativeDonations = calculateArtistTotalDonations(currentArtist, artistSongs);
@@ -261,6 +317,7 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
 
     const updatedArtist: ArtistUser = {
       ...currentArtist,
+      avatarUrl: editAvatarPreview || currentArtist.avatarUrl,
       bio: editBio.trim() || currentArtist.bio,
       artistQuote: editQuote.trim() || undefined,
       musicalRoots: editRoots.trim() || undefined,
@@ -273,6 +330,7 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
     };
 
     StorageService.saveArtist(updatedArtist);
+    HostingerService.saveSingleArtist(updatedArtist);
     if (onArtistUpdated) {
       onArtistUpdated(updatedArtist);
     }
@@ -697,11 +755,40 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
 
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
           <div className="flex items-center gap-5">
-            <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-yellow-400 shadow-xl bg-black shrink-0">
+            <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-yellow-400 shadow-xl bg-black shrink-0 group">
               <img
-                src={currentArtist.avatarUrl}
+                src={editAvatarPreview || currentArtist.avatarUrl}
                 alt={currentArtist.stageName}
                 className="w-full h-full object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isArtistActive) {
+                    triggerBlockedAction('Chanje Foto Pwofil');
+                    return;
+                  }
+                  headerAvatarInputRef.current?.click();
+                }}
+                disabled={isUploadingAvatar}
+                className="absolute inset-0 bg-black/65 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-bold gap-1 cursor-pointer"
+                title="Klike pou chanje foto pwofil ou"
+              >
+                {isUploadingAvatar ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-yellow-400" />
+                ) : (
+                  <>
+                    <Camera className="w-5 h-5 text-yellow-400" />
+                    <span>Chanje Foto</span>
+                  </>
+                )}
+              </button>
+              <input
+                ref={headerAvatarInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarFileChange}
+                className="hidden"
               />
             </div>
             <div>
@@ -1037,7 +1124,7 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
                 <div className="space-y-4">
                   <div className="flex items-center gap-3.5">
                     <img
-                      src={currentArtist.avatarUrl}
+                      src={editAvatarPreview || currentArtist.avatarUrl}
                       alt={currentArtist.stageName}
                       className="w-16 h-16 rounded-2xl object-cover border-2 border-white/20 shadow-xl"
                     />
@@ -1120,6 +1207,83 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
                         {RESTRICTED_DIGITS_ERROR_MESSAGE}
                       </p>
                     </div>
+                  </div>
+                )}
+
+                {/* Dedicated Profile Picture Section */}
+                <div className="p-4 rounded-2xl bg-[#05070a] border border-white/[0.1] flex flex-col sm:flex-row items-center gap-4">
+                  <div className="relative w-20 h-20 rounded-2xl overflow-hidden border-2 border-cyan-500/50 shadow-lg bg-black shrink-0">
+                    <img
+                      src={editAvatarPreview || currentArtist.avatarUrl}
+                      alt={currentArtist.stageName}
+                      className="w-full h-full object-cover"
+                    />
+                    {isUploadingAvatar && (
+                      <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+                        <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 text-center sm:text-left space-y-1.5">
+                    <div className="flex items-center gap-2 justify-center sm:justify-start">
+                      <Camera className="w-4 h-4 text-cyan-400" />
+                      <h4 className="text-xs font-bold text-white">Foto Pwofil Atis Ou (Avatar)</h4>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Ou ka chanje foto pwofil ou a nenpòt kilè. Li ap parèt sou tout kat mizik ou, nan Top 3, ak nan paj pwofil ou pou fanatik yo.
+                    </p>
+                    <div className="pt-1 flex items-center gap-3 justify-center sm:justify-start">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!isArtistActive) {
+                            triggerBlockedAction('Chanje Foto Pwofil');
+                            return;
+                          }
+                          profileAvatarInputRef.current?.click();
+                        }}
+                        disabled={isUploadingAvatar}
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white flex items-center gap-1.5 transition-all shadow-md shadow-cyan-900/30 active:scale-95"
+                      >
+                        {isUploadingAvatar ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Ap Telechaje...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Chwazi Yon Nouvo Foto</span>
+                          </>
+                        )}
+                      </button>
+                      <input
+                        ref={profileAvatarInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleAvatarFileChange}
+                        className="hidden"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {avatarUploadMsg && (
+                  <div
+                    className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                      avatarUploadMsg.type === 'success'
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                        : avatarUploadMsg.type === 'error'
+                        ? 'bg-red-500/10 border-red-500/30 text-red-300'
+                        : 'bg-blue-500/10 border-blue-500/30 text-blue-300'
+                    }`}
+                  >
+                    {avatarUploadMsg.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                    )}
+                    <span>{avatarUploadMsg.text}</span>
                   </div>
                 )}
 

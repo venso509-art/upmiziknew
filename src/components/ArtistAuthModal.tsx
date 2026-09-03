@@ -29,6 +29,7 @@ import { HAITIAN_DEPARTMENTS_AND_CITIES, ALL_HAITIAN_CITIES } from '../data/hait
 import { compressAndReadFile } from '../utils/imageUtils';
 import { StorageService } from '../utils/storage';
 import { HostingerService } from '../utils/hostingerService';
+import { UpMizikAPI } from '../utils/apiService';
 import { validateRestrictedDigits, hasRestrictedPhoneOrDigits, RESTRICTED_DIGITS_ERROR_MESSAGE } from '../utils/textValidation';
 
 interface ArtistAuthModalProps {
@@ -138,6 +139,11 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
       try {
         const compressed = await compressAndReadFile(file, 600, 600, 0.72);
         setAvatarPreview(compressed);
+        UpMizikAPI.uploadFile(file, 'avatars').then(res => {
+          if (res && res.url) {
+            setAvatarPreview(res.url);
+          }
+        }).catch(() => {});
       } catch (err) {
         const reader = new FileReader();
         reader.onload = (ev) => setAvatarPreview(ev.target?.result as string);
@@ -152,6 +158,11 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
       try {
         const compressed = await compressAndReadFile(file, 800, 1000, 0.72);
         setProofPreview(compressed);
+        UpMizikAPI.uploadFile(file, 'proofs').then(res => {
+          if (res && res.url) {
+            setProofPreview(res.url);
+          }
+        }).catch(() => {});
       } catch (err) {
         const reader = new FileReader();
         reader.onload = (ev) => setProofPreview(ev.target?.result as string);

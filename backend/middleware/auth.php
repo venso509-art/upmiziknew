@@ -91,20 +91,20 @@ function checkRateLimit(PDO $pdo, string $identifier, string $ip, int $maxAttemp
     $now = date('Y-m-d H:i:s');
     
     // Netwaye ansyen blokaj ki ekspire
-    $cleanup = $pdo->prepare("DELETE FROM blocages_securite WHERE bloque_jusqua < ?");
+    $cleanup = $pdo->prepare("DELETE FROM blocages_securite WHERE expire_a < ?");
     $cleanup->execute([$now]);
 
-    // Tcheke si adrès la oswa identifiant an bloke
-    $stmt = $pdo->prepare("SELECT * FROM blocages_securite WHERE identifiant = ? OR ip_adresse = ?");
-    $stmt->execute([$identifier, $ip]);
+    // Tcheke si adrès IP an bloke
+    $stmt = $pdo->prepare("SELECT * FROM blocages_securite WHERE ip = ?");
+    $stmt->execute([$ip]);
     $block = $stmt->fetch();
 
-    if ($block && strtotime($block['bloque_jusqua']) > time()) {
-        $remaining = ceil((strtotime($block['bloque_jusqua']) - time()) / 60);
+    if ($block && strtotime($block['expire_a']) > time()) {
+        $remaining = ceil((strtotime($block['expire_a']) - time()) / 60);
         return [
             'allowed' => false,
             'message' => "Twòp tantativ echwe. Aksè bloke pou {$remaining} minit.",
-            'blocked_until' => $block['bloque_jusqua']
+            'blocked_until' => $block['expire_a']
         ];
     }
 
@@ -112,7 +112,7 @@ function checkRateLimit(PDO $pdo, string $identifier, string $ip, int $maxAttemp
     $timeWindow = date('Y-m-d H:i:s', time() - ($blockMinutes * 60));
     $countStmt = $pdo->prepare("
         SELECT COUNT(*) FROM tentatives_connexion 
-        WHERE (identifiant = ? OR ip_adresse = ?) AND succes = 0 AND date_tentative >= ?
+        WHERE (identifiant = ? OR ip = ?) AND reussi = 0 AND date_tentative >= ?
     ");
     $countStmt->execute([$identifier, $ip, $timeWindow]);
     $attempts = (int)$countStmt->fetchColumn();
@@ -120,11 +120,11 @@ function checkRateLimit(PDO $pdo, string $identifier, string $ip, int $maxAttemp
     if ($attempts >= $maxAttempts) {
         $blockUntil = date('Y-m-d H:i:s', time() + ($blockMinutes * 60));
         $insBlock = $pdo->prepare("
-            INSERT INTO blocages_securite (identifiant, ip_adresse, tentatives_echouees, bloque_jusqua, date_creation)
-            VALUES (?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE tentatives_echouees = ?, bloque_jusqua = ?
+            INSERT INTO blocages_securite (ip, motif, date_blocage, expire_a)
+            VALUES (?, 'Twòp tantativ koneksyon ki echwe', NOW(), ?)
+            ON DUPLICATE KEY UPDATE expire_a = VALUES(expire_a)
         ");
-        $insBlock->execute([$identifier, $ip, $attempts + 1, $blockUntil, $now, $attempts + 1, $blockUntil]);
+        $insBlock->execute([$ip, $blockUntil]);
 
         return [
             'allowed' => false,
@@ -140,10 +140,9 @@ function checkRateLimit(PDO $pdo, string $identifier, string $ip, int $maxAttemp
  * Anrejistre tantativ login
  */
 function recordLoginAttempt(PDO $pdo, string $identifier, string $email, string $ip, bool $success, ?string $userAgent = null): void {
-    $id = 'tent_' . time() . '_' . bin2hex(random_bytes(3));
     $stmt = $pdo->prepare("
-        INSERT INTO tentatives_connexion (id, identifiant, email, ip_adresse, user_agent, succes, date_tentative)
-        VALUES (?, ?, ?, ?, ?, ?, NOW())
+        INSERT INTO tentatives_connexion (identifiant, ip, reussi, date_tentative)
+        VALUES (?, ?, ?, NOW())
     ");
-    $stmt->execute([$id, $identifier, $email, $ip, $userAgent ?? ($_SERVER['HTTP_USER_AGENT'] ?? 'Unknown'), $success ? 1 : 0]);
+    $stmt->execute([$identifier, $ip, $success ? 1 : 0]);
 }

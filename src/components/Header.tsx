@@ -87,7 +87,14 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-[#05070a]/80 backdrop-blur-xl border-b border-white/[0.08] transition-all">
+    <header 
+      id="main-app-header"
+      className={`sticky top-0 z-50 w-full backdrop-blur-xl border-b transition-colors duration-200 ${
+        themeMode === 'light'
+          ? 'bg-white/95 border-slate-200/90 shadow-sm'
+          : 'bg-[#05070a]/95 border-white/[0.08]'
+      }`}
+    >
       {/* Haitian Flag Accent Top Stripe */}
       <div className="h-[2px] w-full flex">
         <div className="w-1/2 bg-blue-500 shadow-sm shadow-blue-500/50"></div>

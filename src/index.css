@@ -1,23 +1,34 @@
 @import "tailwindcss";
 
+:root {
+  --app-font-family: 'Plus Jakarta Sans', sans-serif;
+  --app-font-title: 'Cabinet Grotesk', 'Plus Jakarta Sans', sans-serif;
+}
+
 @layer base {
   html {
     touch-action: manipulation;
     -webkit-text-size-adjust: 100%;
-    overscroll-behavior: none;
-    overscroll-behavior-y: none;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   body {
     background-color: #05070a;
     color: #f1f5f9;
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    overflow-x: hidden;
-    overscroll-behavior: none;
-    overscroll-behavior-y: none;
+    font-family: var(--app-font-family), sans-serif;
+    overflow-x: clip;
     -webkit-overflow-scrolling: touch;
     transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  /* Universal cascade so user-selected typography adapts across the entire site */
+  body, button, a, input, select, textarea, p, span, label, li, .font-sans {
+    font-family: var(--app-font-family), sans-serif !important;
+  }
+
+  /* Headings & prominent titles adapt to the style's title font */
+  h1, h2, h3, h4, h5, h6, [class*="font-['Cabinet_Grotesk'"], [class*='font-["Cabinet_Grotesk"'] {
+    font-family: var(--app-font-title), var(--app-font-family), sans-serif !important;
   }
 
   button, a, input, select, textarea {

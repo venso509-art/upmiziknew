@@ -35,9 +35,14 @@ if (!function_exists('getDBConnection')) {
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode([
                 'success' => false,
-                'message' => 'Erè koneksyon ak baz done a.',
-                'data' => null,
-                'errors' => [env('APP_ENV') === 'development' ? $e->getMessage() : 'Database connection error']
+                'message' => 'Erè koneksyon ak baz done MySQL (' . DB_HOST . ':' . DB_PORT . '): ' . $e->getMessage(),
+                'data' => [
+                    'host' => DB_HOST,
+                    'port' => DB_PORT,
+                    'database' => DB_NAME,
+                    'user' => DB_USER
+                ],
+                'errors' => [$e->getMessage()]
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             exit();
         }

@@ -12,7 +12,9 @@ import {
   SocialPost,
   SocialPostComment,
   ArtistInboxMessage,
-  ArchiveRecord
+  ArchiveRecord,
+  PubItem,
+  RpaItem
 } from '../types';
 import { UpMizikAPI } from './apiService';
 import { StorageService } from './storage';
@@ -21,16 +23,86 @@ export type Unsubscribe = () => void;
 
 class HostingerSyncService {
   private listeners: Map<string, Set<(data: any) => void>> = new Map();
+  private broadcastChannel: BroadcastChannel | null = null;
+  private eventSource: EventSource | null = null;
+  private autoRefetchTimer: any = null;
+  private isRefetchingMusic = false;
+  private tabId = 'tab_' + Math.random().toString(36).substring(2, 9);
 
   constructor() {
     if (typeof window !== 'undefined') {
-      // Koute evènman chanjman pou mete tout konpozan yo ajou imedyatman
+      // 1. Koute evènman chanjman lokal
       window.addEventListener('upmizik_data_sync', (e: Event) => {
         const customEvent = e as CustomEvent<{ type: string; data: any }>;
         if (customEvent.detail) {
           this.notifySubscribers(customEvent.detail.type, customEvent.detail.data);
         }
       });
+
+      // 2. BroadcastChannel pou senkronizasyon an dirèk ant tout onglet ouvè sou menm aparèy la
+      if (typeof BroadcastChannel !== 'undefined') {
+        try {
+          this.broadcastChannel = new BroadcastChannel('upmizik_realtime_sync');
+          this.broadcastChannel.onmessage = (event) => {
+            if (event.data && event.data.sender !== this.tabId) {
+              const { type, data } = event.data;
+              if (type) {
+                this.notifySubscribers(type, data);
+                if (type === 'music' || type === 'music_update') {
+                  this.fetchMusicAndNotify(false);
+                }
+              }
+            }
+          };
+        } catch (e) {
+          console.warn('[HostingerService] BroadcastChannel unavailable:', e);
+        }
+      }
+
+      // 3. Koute Storage Event (fallback pou tout navigatè)
+      window.addEventListener('storage', (e: StorageEvent) => {
+        if (e.key === 'upmizik_music_broadcast') {
+          this.fetchMusicAndNotify(false);
+        }
+      });
+
+      // 4. Kòmanse koute stream SSE si disponib
+      this.initRealtimeStream();
+    }
+  }
+
+  /**
+   * Kominikasyon an tan reyèl ak Server-Sent Events (SSE) sou sèvè a
+   */
+  public initRealtimeStream() {
+    if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
+    if (this.eventSource) return;
+
+    try {
+      const baseUrl = UpMizikAPI.getBaseUrl();
+      const streamUrl = `${baseUrl}/stream.php`;
+      const es = new EventSource(streamUrl);
+
+      es.addEventListener('music_update', (event: MessageEvent) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          if (parsed && (parsed.count !== undefined || parsed.latest)) {
+            this.fetchMusicAndNotify(true);
+          }
+        } catch {}
+      });
+
+      es.addEventListener('connected', () => {
+        // SSE konekte avèk siksè
+      });
+
+      es.onerror = () => {
+        // SSE ap eseye rekonekte otomatikman
+      };
+
+      this.eventSource = es;
+    } catch (e) {
+      console.warn('[HostingerService] SSE stream fallback:', e);
     }
   }
 
@@ -55,6 +127,15 @@ class HostingerSyncService {
           detail: { type, data }
         })
       );
+      if (this.broadcastChannel) {
+        try {
+          this.broadcastChannel.postMessage({
+            type,
+            sender: this.tabId,
+            data
+          });
+        } catch {}
+      }
     }
   }
 
@@ -115,7 +196,11 @@ class HostingerSyncService {
       this.emitChange('artists', updated);
 
       // Voye nan backend Hostinger MySQL
-      await UpMizikAPI.registerArtist(artist);
+      if (idx >= 0) {
+        await UpMizikAPI.updateArtist(artist.id, artist);
+      } else {
+        await UpMizikAPI.registerArtist(artist);
+      }
     } catch (e) {
       console.warn('[HostingerService] saveSingleArtist warn:', e);
     }
@@ -154,6 +239,100 @@ class HostingerSyncService {
     } catch {
       return StorageService.getMusic();
     }
+  }
+
+  /**
+   * Refetch mizik yo sou sèvè Hostinger MySQL epi difize bay tout abòne yo si gen chanjman
+   */
+  async fetchMusicAndNotify(forceNotify = false): Promise<MusicItem[]> {
+    if (this.isRefetchingMusic) {
+      return StorageService.getMusic();
+    }
+    this.isRefetchingMusic = true;
+    try {
+      const serverMusic = await UpMizikAPI.getMusics();
+      if (serverMusic && serverMusic.length > 0) {
+        const localMusic = StorageService.getMusic();
+        const serverMap = new Map(serverMusic.map(m => [m.id, m]));
+        const localMap = new Map(localMusic.map(m => [m.id, m]));
+
+        let hasDifferences = forceNotify || serverMusic.length !== localMusic.length;
+
+        if (!hasDifferences) {
+          for (const sm of serverMusic) {
+            const lm = localMap.get(sm.id);
+            if (!lm || lm.listens !== sm.listens || lm.title !== sm.title || lm.status !== sm.status) {
+              hasDifferences = true;
+              break;
+            }
+          }
+        }
+
+        if (hasDifferences) {
+          const merged: MusicItem[] = [...serverMusic];
+          for (const lm of localMusic) {
+            if (!serverMap.has(lm.id)) {
+              merged.push(lm);
+              serverMap.set(lm.id, lm);
+            }
+          }
+          StorageService.saveMusic(merged);
+          this.emitChange('music', merged);
+          return merged;
+        }
+      }
+      return StorageService.getMusic();
+    } catch (e) {
+      console.warn('[HostingerService] fetchMusicAndNotify warn:', e);
+      return StorageService.getMusic();
+    } finally {
+      this.isRefetchingMusic = false;
+    }
+  }
+
+  /**
+   * Mekanis Refetch Otomatik & Polling pou mizik ki fèk ajoute
+   */
+  startAutoRefetch(intervalMs = 8000): Unsubscribe {
+    if (typeof window === 'undefined') return () => {};
+
+    // 1. Kouri refetch inisyal
+    this.fetchMusicAndNotify();
+
+    // 2. Enteval regilye
+    if (this.autoRefetchTimer) {
+      clearInterval(this.autoRefetchTimer);
+    }
+    this.autoRefetchTimer = setInterval(() => {
+      this.fetchMusicAndNotify();
+    }, intervalMs);
+
+    // 3. Lè itilizatè a retounen sou paj la (Visibility / Focus / Online)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        this.fetchMusicAndNotify();
+      }
+    };
+    const handleFocus = () => {
+      this.fetchMusicAndNotify();
+    };
+    const handleOnline = () => {
+      this.fetchMusicAndNotify();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      if (this.autoRefetchTimer) {
+        clearInterval(this.autoRefetchTimer);
+        this.autoRefetchTimer = null;
+      }
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('online', handleOnline);
+    };
   }
 
   async syncMusic(list: MusicItem[]) {
@@ -195,10 +374,34 @@ class HostingerSyncService {
       StorageService.saveMusic(updated);
       this.emitChange('music', updated);
 
+      // Notifikasyon Broadcast pou tout onglet ak fenèt
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('upmizik_music_broadcast', Date.now().toString());
+        } catch {}
+      }
+
+      // Asire atis la egziste sou sèvè a dabò pou evite foreign key constraint error
+      if (item.artistId) {
+        const localArtist = StorageService.getArtists().find((a) => a.id === item.artistId);
+        if (localArtist) {
+          await UpMizikAPI.registerArtist(localArtist).catch(() => {});
+        }
+      }
+
       // Voye nan Hostinger MySQL
-      await UpMizikAPI.addMusic(item);
+      const res = await UpMizikAPI.addMusic(item);
+
+      // Si gen siksè, re-senkronize pou asire tout IDs ak metadata yo aliyen ak baz done a
+      if (res && res.success) {
+        setTimeout(() => {
+          this.fetchMusicAndNotify(true);
+        }, 300);
+      }
+      return res;
     } catch (e) {
       console.warn('[HostingerService] saveSingleMusic warn:', e);
+      return { success: false, message: 'Erè anrejistreman mizik' };
     }
   }
 
@@ -377,6 +580,129 @@ class HostingerSyncService {
     } catch (e) {
       console.warn('[HostingerService] syncArchives warn:', e);
     }
+  }
+
+  // ==========================================
+  // RPA (RIBRIK POUSE ATIS)
+  // ==========================================
+  async fetchRpa(): Promise<RpaItem[] | null> {
+    try {
+      const apiRpa = await UpMizikAPI.getRpa();
+      if (apiRpa && apiRpa.length > 0) {
+        return apiRpa;
+      }
+      return StorageService.getRpa();
+    } catch {
+      return StorageService.getRpa();
+    }
+  }
+
+  async syncRpa(list: RpaItem[]) {
+    try {
+      StorageService.saveRpa(list);
+      this.emitChange('rpa', list);
+      await UpMizikAPI.syncAllData({ rpa: list });
+    } catch (e) {
+      console.warn('[HostingerService] syncRpa warn:', e);
+    }
+  }
+
+  async saveSingleRpa(item: RpaItem) {
+    try {
+      const all = StorageService.getRpa();
+      const idx = all.findIndex((r) => r.id === item.id);
+      let updated: RpaItem[];
+      if (idx >= 0) {
+        updated = [...all];
+        updated[idx] = { ...updated[idx], ...item };
+      } else {
+        updated = [item, ...all];
+      }
+      StorageService.saveRpa(updated);
+      this.emitChange('rpa', updated);
+      await UpMizikAPI.addRpa(item);
+    } catch (e) {
+      console.warn('[HostingerService] saveSingleRpa warn:', e);
+    }
+  }
+
+  async deleteRpa(id: string) {
+    try {
+      const all = StorageService.getRpa().filter((r) => r.id !== id);
+      StorageService.saveRpa(all);
+      this.emitChange('rpa', all);
+      await UpMizikAPI.deleteRpa(id);
+    } catch (e) {
+      console.warn('[HostingerService] deleteRpa warn:', e);
+    }
+  }
+
+  subscribeToRpa(callback: (rpa: RpaItem[]) => void): Unsubscribe {
+    if (!this.listeners.has('rpa')) {
+      this.listeners.set('rpa', new Set());
+    }
+    const set = this.listeners.get('rpa')!;
+    set.add(callback);
+    callback(StorageService.getRpa());
+    return () => {
+      set.delete(callback);
+    };
+  }
+
+  // ==========================================
+  // PIBLISITE (PUBS)
+  // ==========================================
+  async fetchPubs(): Promise<PubItem[] | null> {
+    try {
+      const apiPubs = await UpMizikAPI.getPubs(false);
+      if (apiPubs && apiPubs.length > 0) {
+        return apiPubs;
+      }
+      return StorageService.getPubs();
+    } catch {
+      return StorageService.getPubs();
+    }
+  }
+
+  async syncPubs(list: PubItem[]) {
+    try {
+      StorageService.savePubs(list);
+      this.emitChange('pubs', list);
+      await UpMizikAPI.syncAllData({ pubs: list });
+    } catch (e) {
+      console.warn('[HostingerService] syncPubs warn:', e);
+    }
+  }
+
+  async saveSinglePub(item: PubItem) {
+    try {
+      const all = StorageService.getPubs();
+      const idx = all.findIndex((p) => p.id === item.id);
+      let updated: PubItem[];
+      if (idx >= 0) {
+        updated = [...all];
+        updated[idx] = { ...updated[idx], ...item };
+      } else {
+        updated = [item, ...all];
+      }
+      StorageService.savePubs(updated);
+      this.emitChange('pubs', updated);
+      await UpMizikAPI.addPub(item);
+    } catch (e) {
+      console.warn('[HostingerService] saveSinglePub warn:', e);
+    }
+  }
+
+  subscribeToPubs(callback: (pubs: PubItem[]) => void): Unsubscribe {
+    if (!this.listeners.has('pubs')) {
+      this.listeners.set('pubs', new Set());
+    }
+    const set = this.listeners.get('pubs')!;
+    set.add(callback);
+    callback(StorageService.getPubs());
+    return () => {
+      set.delete(callback);
+    };
   }
 
   // ==========================================

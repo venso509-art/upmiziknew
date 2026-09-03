@@ -1,6 +1,6 @@
 <?php
 /**
- * UpMizik - Albums API Endpoint (Hostinger / MySQL / PDO)
+ * UpMizik - Albums API Endpoint (Derived from musiques table)
  */
 
 require_once dirname(__DIR__) . '/middleware/cors.php';
@@ -19,12 +19,27 @@ if ($method === 'GET') {
 
     if ($id) {
         $stmt = $pdo->prepare("
-            SELECT a.*, ar.name as artistLegalName, ar.stageName, ar.avatarUrl as artistAvatar 
-            FROM albums a 
-            LEFT JOIN artists ar ON a.artistId = ar.id 
-            WHERE a.id = ?
+            SELECT 
+                COALESCE(m.nom_album, m.titre) AS id,
+                COALESCE(m.nom_album, m.titre) AS title,
+                m.artiste_id AS artistId,
+                m.nom_artiste AS artistName,
+                MIN(m.cover_url) AS coverUrl,
+                m.categorie AS genre,
+                DATE(MIN(m.date_creation)) AS releaseDate,
+                'active' AS status,
+                MIN(m.date_creation) AS created_at,
+                ar.nom_complet AS artistLegalName,
+                ar.nom_scene AS stageName,
+                ar.avatar_url AS artistAvatar,
+                COUNT(m.id) AS tracksCount
+            FROM musiques m 
+            LEFT JOIN artistes ar ON m.artiste_id = ar.id 
+            WHERE (m.nom_album = ? OR m.id = ?)
+            GROUP BY COALESCE(m.nom_album, m.titre), m.artiste_id, m.nom_artiste, m.categorie, ar.nom_complet, ar.nom_scene, ar.avatar_url
+            LIMIT 1
         ");
-        $stmt->execute([$id]);
+        $stmt->execute([$id, $id]);
         $album = $stmt->fetch();
 
         if (!$album) {
@@ -38,11 +53,33 @@ if ($method === 'GET') {
 
         // Rekipere tout mizik ki nan albòm nan
         $tracksStmt = $pdo->prepare("
-            SELECT * FROM musics 
-            WHERE album_id = ? OR albumName = ?
-            ORDER BY trackNumber ASC, created_at ASC
+            SELECT 
+                m.id,
+                m.titre AS title,
+                m.artiste_id AS artistId,
+                m.nom_artiste AS artistName,
+                m.featuring AS feat,
+                m.categorie AS category,
+                m.format AS releaseFormat,
+                m.nom_album AS albumName,
+                m.nom_album AS album_id,
+                m.numero_piste AS trackNumber,
+                m.cover_url AS coverUrl,
+                m.audio_url AS audioUrl,
+                m.duree AS duration,
+                m.ecoutes AS listens,
+                m.total_dons AS totalDonations,
+                m.position,
+                m.youtube_url AS youtubeUrl,
+                m.tiktok_url AS tiktokUrl,
+                m.instagram_url AS instagramUrl,
+                'active' AS status,
+                m.date_creation AS created_at
+            FROM musiques m
+            WHERE (m.nom_album = ? OR m.id = ?)
+            ORDER BY m.numero_piste ASC, m.date_creation ASC
         ");
-        $tracksStmt->execute([$id, $album['title']]);
+        $tracksStmt->execute([$album['title'], $id]);
         $album['tracks'] = $tracksStmt->fetchAll();
 
         jsonResponse([
@@ -55,25 +92,33 @@ if ($method === 'GET') {
         ]);
     } else {
         $query = "
-            SELECT a.*, ar.stageName, ar.avatarUrl as artistAvatar,
-                   (SELECT COUNT(*) FROM musics m WHERE m.album_id = a.id OR m.albumName = a.title) as tracksCount
-            FROM albums a
-            LEFT JOIN artists ar ON a.artistId = ar.id
-            WHERE 1=1
+            SELECT 
+                m.nom_album AS id,
+                m.nom_album AS title,
+                m.artiste_id AS artistId,
+                m.nom_artiste AS artistName,
+                MIN(m.cover_url) AS coverUrl,
+                m.categorie AS genre,
+                DATE(MIN(m.date_creation)) AS releaseDate,
+                'active' AS status,
+                MIN(m.date_creation) AS created_at,
+                ar.nom_scene AS stageName,
+                ar.avatar_url AS artistAvatar,
+                COUNT(m.id) AS tracksCount
+            FROM musiques m
+            LEFT JOIN artistes ar ON m.artiste_id = ar.id
+            WHERE m.nom_album IS NOT NULL AND m.nom_album != ''
         ";
         $params = [];
 
         if ($artistId) {
-            $query .= " AND a.artistId = ?";
+            $query .= " AND m.artiste_id = ?";
             $params[] = $artistId;
         }
 
-        if ($status && $status !== 'all') {
-            $query .= " AND a.status = ?";
-            $params[] = $status;
-        }
+        $query .= " GROUP BY m.nom_album, m.artiste_id, m.nom_artiste, m.categorie, ar.nom_scene, ar.avatar_url";
+        $query .= " ORDER BY releaseDate DESC, created_at DESC";
 
-        $query .= " ORDER BY a.releaseDate DESC, a.created_at DESC";
         $stmt = $pdo->prepare($query);
         $stmt->execute($params);
         $albums = $stmt->fetchAll();
@@ -91,7 +136,7 @@ if ($method === 'GET') {
 }
 
 // ----------------------------------------------------------
-// POST: Kreye yon nouvo Albòm
+// POST: Kreye oswa Atribye Mizik nan yon Albòm
 // ----------------------------------------------------------
 if ($method === 'POST') {
     $data = getJsonInput();
@@ -105,30 +150,16 @@ if ($method === 'POST') {
         ], 400);
     }
 
-    $id = !empty($data['id']) ? $data['id'] : 'alb_' . time() . '_' . bin2hex(random_bytes(3));
+    $id = !empty($data['id']) ? $data['id'] : ('alb_' . time() . '_' . bin2hex(random_bytes(2)));
     $title = trim($data['title']);
     $artistId = $data['artistId'];
-    $artistName = $data['artistName'] ?? 'Atis UpMizik';
-    $coverUrl = $data['coverUrl'] ?? 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500&auto=format&fit=crop&q=80';
-    $description = $data['description'] ?? null;
-    $genre = $data['genre'] ?? $data['category'] ?? 'Tout';
-    $releaseDate = $data['releaseDate'] ?? date('Y-m-d');
-    $status = $data['status'] ?? 'active';
+    $trackIds = $data['trackIds'] ?? [];
 
-    $stmt = $pdo->prepare("
-        INSERT INTO albums (id, title, artistId, artistName, coverUrl, description, genre, releaseDate, status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-        ON DUPLICATE KEY UPDATE
-            title = VALUES(title),
-            artistName = VALUES(artistName),
-            coverUrl = VALUES(coverUrl),
-            description = VALUES(description),
-            genre = VALUES(genre),
-            releaseDate = VALUES(releaseDate),
-            status = VALUES(status)
-    ");
-
-    $stmt->execute([$id, $title, $artistId, $artistName, $coverUrl, $description, $genre, $releaseDate, $status]);
+    if (!empty($trackIds) && is_array($trackIds)) {
+        $in = implode(',', array_fill(0, count($trackIds), '?'));
+        $updateStmt = $pdo->prepare("UPDATE musiques SET nom_album = ?, format = 'album' WHERE id IN ($in)");
+        $updateStmt->execute(array_merge([$title], $trackIds));
+    }
 
     jsonResponse([
         'success' => true,
@@ -142,40 +173,24 @@ if ($method === 'POST') {
 }
 
 // ----------------------------------------------------------
-// PUT / PATCH: Modifye yon Albòm
+// PUT / PATCH: Modifye Tit Albòm
 // ----------------------------------------------------------
 if ($method === 'PUT' || $method === 'PATCH') {
     $data = getJsonInput();
     $id = $data['id'] ?? $_GET['id'] ?? null;
+    $newTitle = $data['title'] ?? null;
 
-    if (!$id) {
+    if (!$id || !$newTitle) {
         jsonResponse([
             'success' => false,
-            'message' => 'Id albòm nan obligatwa pou modifikasyon.',
+            'message' => 'Id ak nouvo tit albòm nan obligatwa.',
             'data' => null,
-            'errors' => ['Missing album id']
+            'errors' => ['Missing album id or title']
         ], 400);
     }
 
-    $fields = [];
-    $params = [];
-
-    $updatable = ['title', 'coverUrl', 'description', 'genre', 'releaseDate', 'status'];
-    foreach ($updatable as $f) {
-        if (isset($data[$f])) {
-            $fields[] = "`$f` = ?";
-            $params[] = $data[$f];
-        }
-    }
-
-    if (empty($fields)) {
-        jsonResponse(['success' => false, 'message' => 'Pa gen okenn done pou modifye.'], 400);
-    }
-
-    $params[] = $id;
-    $sql = "UPDATE albums SET " . implode(', ', $fields) . " WHERE id = ?";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
+    $stmt = $pdo->prepare("UPDATE musiques SET nom_album = ? WHERE nom_album = ?");
+    $stmt->execute([$newTitle, $id]);
 
     jsonResponse([
         'success' => true,
@@ -186,7 +201,7 @@ if ($method === 'PUT' || $method === 'PATCH') {
 }
 
 // ----------------------------------------------------------
-// DELETE: Efase yon Albòm
+// DELETE: Efase yon Albòm (Retire asosyasyon nan mizik yo)
 // ----------------------------------------------------------
 if ($method === 'DELETE') {
     $id = $_GET['id'] ?? getJsonInput()['id'] ?? null;
@@ -195,7 +210,7 @@ if ($method === 'DELETE') {
         jsonResponse(['success' => false, 'message' => 'Id albòm nan obligatwa.'], 400);
     }
 
-    $stmt = $pdo->prepare("DELETE FROM albums WHERE id = ?");
+    $stmt = $pdo->prepare("UPDATE musiques SET nom_album = NULL, format = 'single' WHERE nom_album = ?");
     $stmt->execute([$id]);
 
     jsonResponse([

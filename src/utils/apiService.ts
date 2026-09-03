@@ -128,6 +128,20 @@ class ApiService {
     }
   }
 
+  public async updateArtist(artistId: string, data: Partial<ArtistUser>): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/artists.php`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: artistId, ...data }),
+      });
+      const resData = await res.json();
+      return !!resData.success;
+    } catch {
+      return false;
+    }
+  }
+
   // ----------------------------------------------------------
   // MIZIK (MUSICS)
   // ----------------------------------------------------------
@@ -157,6 +171,85 @@ class ApiService {
       return await res.json();
     } catch {
       return { success: false, message: 'Erè piblikasyon mizik' };
+    }
+  }
+
+  public async deleteMusic(musicId: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/musics.php?id=${encodeURIComponent(musicId)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      return !!data.success;
+    } catch {
+      return false;
+    }
+  }
+
+  // ----------------------------------------------------------
+  // RIBRIK POUSE ATIS (RPA)
+  // ----------------------------------------------------------
+
+  public async getRpa(): Promise<RpaItem[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/rpa.php`);
+      const data = await res.json();
+      return data.success ? data.rpa : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public async addRpa(item: Partial<RpaItem>): Promise<{ success: boolean; rpaId?: string; message?: string }> {
+    try {
+      const res = await fetch(`${this.baseUrl}/rpa.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item),
+      });
+      return await res.json();
+    } catch {
+      return { success: false, message: 'Erè piblikasyon RPA' };
+    }
+  }
+
+  public async deleteRpa(id: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/rpa.php?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      return !!data.success;
+    } catch {
+      return false;
+    }
+  }
+
+  // ----------------------------------------------------------
+  // PIBLISITE (PUBS)
+  // ----------------------------------------------------------
+
+  public async getPubs(activeOnly: boolean = true): Promise<PubItem[]> {
+    try {
+      const url = activeOnly ? `${this.baseUrl}/pubs.php?active=1` : `${this.baseUrl}/pubs.php`;
+      const res = await fetch(url);
+      const data = await res.json();
+      return data.success ? data.pubs : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public async addPub(item: Partial<PubItem>): Promise<{ success: boolean; pubId?: string; message?: string }> {
+    try {
+      const res = await fetch(`${this.baseUrl}/pubs.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item),
+      });
+      return await res.json();
+    } catch {
+      return { success: false, message: 'Erè anrejistreman piblisite' };
     }
   }
 

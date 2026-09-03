@@ -11,24 +11,6 @@ $pdo = getDBConnection();
 $moncash = new MonCashService();
 $method = $_SERVER['REQUEST_METHOD'];
 
-function mapStatusToDb(string $status): string {
-    return match (strtolower($status)) {
-        'pending' => 'en_attente',
-        'validated' => 'valide',
-        'rejected' => 'rejete',
-        default => $status
-    };
-}
-
-function mapStatusToFrontend(string $status): string {
-    return match (strtolower($status)) {
-        'en_attente' => 'pending',
-        'valide' => 'validated',
-        'rejete' => 'rejected',
-        default => $status
-    };
-}
-
 // ----------------------------------------------------------
 // GET: Lis Donasyon oswa Verifye Estati MonCash
 // ----------------------------------------------------------
@@ -54,19 +36,8 @@ if ($method === 'GET') {
         if ($verification['success'] && ($verification['is_paid'] ?? false)) {
             // Mete ajou baz done a si gen yon donation korespondan
             if ($orderId) {
-                $upStmt = $pdo->prepare("UPDATE dons SET statut = 'valide' WHERE id = ?");
+                $upStmt = $pdo->prepare("UPDATE donations SET status = 'validated' WHERE id = ?");
                 $upStmt->execute([$orderId]);
-
-                // Mete ajou total nan musiques ak artistes
-                $getDon = $pdo->prepare("SELECT musique_id, artiste_id, montant, part_artiste FROM dons WHERE id = ?");
-                $getDon->execute([$orderId]);
-                $d = $getDon->fetch();
-                if ($d) {
-                    $pdo->prepare("UPDATE musiques SET total_dons = total_dons + ? WHERE id = ?")
-                        ->execute([$d['montant'], $d['musique_id']]);
-                    $pdo->prepare("UPDATE artistes SET total_dons_recus = total_dons_recus + ? WHERE id = ?")
-                        ->execute([$d['part_artiste'], $d['artiste_id']]);
-                }
             }
         }
 
@@ -83,49 +54,26 @@ if ($method === 'GET') {
     $musicId = $_GET['musicId'] ?? null;
     $status = $_GET['status'] ?? null;
 
-    $query = "
-        SELECT 
-            id,
-            musique_id AS musicId,
-            titre_musique AS musicTitle,
-            artiste_id AS artistId,
-            nom_artiste AS artistName,
-            montant AS amount,
-            devise AS currency,
-            nom_donateur AS donorName,
-            telephone_donateur AS donorPhone,
-            preuve_url AS proofUrl,
-            methode_paiement AS paymentMethod,
-            statut AS status,
-            part_artiste AS artistShare,
-            part_plateforme AS platformShare,
-            date_don AS created_at
-        FROM dons 
-        WHERE 1=1
-    ";
+    $query = "SELECT * FROM donations WHERE 1=1";
     $params = [];
 
     if ($artistId) {
-        $query .= " AND artiste_id = ?";
+        $query .= " AND artistId = ?";
         $params[] = $artistId;
     }
     if ($musicId) {
-        $query .= " AND musique_id = ?";
+        $query .= " AND musicId = ?";
         $params[] = $musicId;
     }
     if ($status && $status !== 'all') {
-        $query .= " AND statut = ?";
-        $params[] = mapStatusToDb($status);
+        $query .= " AND status = ?";
+        $params[] = $status;
     }
 
-    $query .= " ORDER BY date_don DESC";
+    $query .= " ORDER BY created_at DESC";
     $stmt = $pdo->prepare($query);
     $stmt->execute($params);
     $donations = $stmt->fetchAll();
-
-    foreach ($donations as &$dn) {
-        $dn['status'] = mapStatusToFrontend($dn['status'] ?? 'en_attente');
-    }
 
     jsonResponse([
         'success' => true,
@@ -160,19 +108,19 @@ if ($method === 'POST') {
         $paymentResult = $moncash->createPayment($orderId, $amount, "Sipò UpMizik pou {$data['artistName']}");
 
         if ($paymentResult['success']) {
-            // Anrejistre kòm en_attente nan baz done a
+            // Anrejistre kòm pending nan baz done a
             $artistShare = $amount * 0.85;
             $platformShare = $amount * 0.15;
 
             $ins = $pdo->prepare("
-                INSERT INTO dons (
-                    id, musique_id, titre_musique, artiste_id, nom_artiste, montant,
-                    devise, nom_donateur, telephone_donateur, preuve_url, methode_paiement,
-                    statut, part_artiste, part_plateforme, date_don
+                INSERT INTO donations (
+                    id, musicId, musicTitle, artistId, artistName, amount,
+                    currency, donorName, donorPhone, proofUrl, paymentMethod,
+                    status, artistShare, platformShare, created_at
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?,
                     'HTG', ?, ?, 'MonCash Online', 'MonCash',
-                    'en_attente', ?, ?, NOW()
+                    'pending', ?, ?, NOW()
                 )
             ");
             $ins->execute([
@@ -206,28 +154,28 @@ if ($method === 'POST') {
     $artistId = $data['artistId'];
     $artistName = $data['artistName'] ?? 'Atis UpMizik';
     $amount = (float)$data['amount'];
-    $currency = $data['currency'] ?? 'HTG';
+    $currency = $data['currency'] ?? 'USD';
     $donorName = $data['donorName'] ?? 'Fanatik Anonim';
     $donorPhone = $data['donorPhone'] ?? 'Non espesifye';
     $proofUrl = $data['proofUrl'] ?? '';
     $paymentMethod = $data['paymentMethod'] ?? 'MonCash';
-    $status = mapStatusToDb($data['status'] ?? 'pending');
+    $status = $data['status'] ?? 'pending';
     $artistShare = (float)($data['artistShare'] ?? ($amount * 0.85));
     $platformShare = (float)($data['platformShare'] ?? ($amount * 0.15));
 
     $stmt = $pdo->prepare("
-        INSERT INTO dons (
-            id, musique_id, titre_musique, artiste_id, nom_artiste, montant,
-            devise, nom_donateur, telephone_donateur, preuve_url, methode_paiement,
-            statut, part_artiste, part_plateforme, date_don
+        INSERT INTO donations (
+            id, musicId, musicTitle, artistId, artistName, amount,
+            currency, donorName, donorPhone, proofUrl, paymentMethod,
+            status, artistShare, platformShare, created_at
         ) VALUES (
             ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?, NOW()
         )
         ON DUPLICATE KEY UPDATE
-            statut = VALUES(statut),
-            preuve_url = VALUES(preuve_url)
+            status = VALUES(status),
+            proofUrl = VALUES(proofUrl)
     ");
 
     $stmt->execute([
@@ -251,35 +199,33 @@ if ($method === 'POST') {
 if ($method === 'PUT' || $method === 'PATCH') {
     $data = getJsonInput();
     $id = $data['id'] ?? $_GET['id'] ?? null;
-    $rawStatus = $data['status'] ?? null;
+    $status = $data['status'] ?? null;
 
-    if (!$id || !$rawStatus) {
+    if (!$id || !$status) {
         jsonResponse(['success' => false, 'message' => 'Id ak nouvo estati a obligatwa.'], 400);
     }
 
-    $status = mapStatusToDb($rawStatus);
-
-    $stmt = $pdo->prepare("UPDATE dons SET statut = ? WHERE id = ?");
+    $stmt = $pdo->prepare("UPDATE donations SET status = ? WHERE id = ?");
     $stmt->execute([$status, $id]);
 
-    // Si donasyon an valide, ogmante total_dons nan musiques ak artistes
-    if ($status === 'valide') {
-        $getDon = $pdo->prepare("SELECT musique_id, artiste_id, montant, part_artiste FROM dons WHERE id = ?");
+    // Si donasyon an valide, ogmante totalDonations nan tablo musics ak artists
+    if ($status === 'validated') {
+        $getDon = $pdo->prepare("SELECT * FROM donations WHERE id = ?");
         $getDon->execute([$id]);
         $don = $getDon->fetch();
 
         if ($don) {
-            $pdo->prepare("UPDATE musiques SET total_dons = total_dons + ? WHERE id = ?")
-                ->execute([$don['montant'], $don['musique_id']]);
-            $pdo->prepare("UPDATE artistes SET total_dons_recus = total_dons_recus + ? WHERE id = ?")
-                ->execute([$don['part_artiste'], $don['artiste_id']]);
+            $pdo->prepare("UPDATE musics SET totalDonations = totalDonations + ? WHERE id = ?")
+                ->execute([$don['amount'], $don['musicId']]);
+            $pdo->prepare("UPDATE artists SET totalDonationsReceived = totalDonationsReceived + ? WHERE id = ?")
+                ->execute([$don['artistShare'], $don['artistId']]);
         }
     }
 
     jsonResponse([
         'success' => true,
         'message' => 'Estati donasyon an mete ajou avèk siksè!',
-        'data' => ['donationId' => $id, 'status' => mapStatusToFrontend($status)],
+        'data' => ['donationId' => $id, 'status' => $status],
         'errors' => []
     ]);
 }

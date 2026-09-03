@@ -230,7 +230,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
       stage: stageName,
       photoUrl: photoData,
       userAgent: navigator.userAgent,
-      notes: `Tantativ san otorizasyon repete 3 fwa sou ${stageName === 'primary_login' ? 'Imèl/Modpas' : 'Kòd Mèt Sekrè'}. Foto kaptire epi voye bay Admin an Chèf.`
+      notes: `🚨 Tantativ san otorizasyon repete 3 fwa sou ${stageName === 'primary_login' ? 'Imèl/Modpas' : 'Kòd Mèt Sekrè'}. Foto kaptire epi anrejistre pou voye bay imèl ofisyèl upmizik@gmail.com.`
     });
 
     setLockoutRemaining(15 * 60); // 15 minutes
@@ -258,8 +258,9 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
 
     const isEmailValid =
       inputEmail === storedAdminEmail ||
-      inputEmail === 'ciblesecurity404@um.com' ||
+      inputEmail === 'upmizik@gmail.com' ||
       inputEmail === 'admin.upmizik@gmail.com' ||
+      inputEmail === 'ciblesecurity404@um.com' ||
       inputEmail === 'venso509@gmail.com';
 
     setIsLoading(true);
@@ -630,7 +631,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
                   Aksè Bloke pou Sekirite
                 </h3>
                 <p className="text-xs text-slate-300 max-w-sm mx-auto">
-                  Sistèm nan bloke aksè a pou rezon sekirite.
+                  Sistèm nan bloke aksè a pou rezon sekirite apre tantativ echwe. Foto ak rapò entrizyon an anrejistre epi voye bay imèl ofisyèl sit la: <strong className="text-yellow-400">upmizik@gmail.com</strong>.
                 </p>
               </div>
 

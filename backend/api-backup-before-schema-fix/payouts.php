@@ -1,6 +1,6 @@
 <?php
 /**
- * UpMizik - Payouts & Transfers API Endpoint (Mapped directly with artistes table)
+ * UpMizik - Payouts & Transfers API Endpoint (Hostinger / MySQL / PDO)
  */
 
 require_once dirname(__DIR__) . '/middleware/cors.php';
@@ -16,44 +16,23 @@ if ($method === 'GET') {
     $artistId = $_GET['artistId'] ?? null;
     $status = $_GET['status'] ?? null;
 
-    $query = "
-        SELECT 
-            CONCAT('pay_', a.id) AS id,
-            a.id AS artistId,
-            a.nom_scene AS artistName,
-            a.nom_scene AS stageName,
-            a.nom_complet AS artistLegalName,
-            a.telephone AS artistPhone,
-            a.ville AS artistCity,
-            COALESCE(a.montant_paye, ROUND(a.total_dons_recus * 0.85, 2)) AS amount,
-            'HTG' AS currency,
-            'MonCash' AS paymentMethod,
-            a.telephone AS accountNumber,
-            CASE WHEN a.paye_ce_mois = 1 THEN 'paid' ELSE 'pending' END AS status,
-            a.reference_paiement AS transactionReference,
-            a.reference_paiement AS notes,
-            a.date_paiement AS processedAt,
-            a.date_inscription AS requestedAt,
-            a.date_inscription AS created_at
-        FROM artistes a 
-        WHERE 1=1
-    ";
+    $query = "SELECT p.*, a.stageName, a.name as artistLegalName, a.phone as artistPhone, a.city as artistCity 
+              FROM payouts p 
+              LEFT JOIN artists a ON p.artistId = a.id 
+              WHERE 1=1";
     $params = [];
 
     if ($artistId) {
-        $query .= " AND a.id = ?";
+        $query .= " AND p.artistId = ?";
         $params[] = $artistId;
     }
 
     if ($status && $status !== 'all') {
-        if ($status === 'paid' || $status === 'approved') {
-            $query .= " AND a.paye_ce_mois = 1";
-        } elseif ($status === 'pending') {
-            $query .= " AND a.paye_ce_mois = 0";
-        }
+        $query .= " AND p.status = ?";
+        $params[] = $status;
     }
 
-    $query .= " ORDER BY a.date_paiement DESC, a.date_inscription DESC";
+    $query .= " ORDER BY p.requestedAt DESC, p.created_at DESC";
     $stmt = $pdo->prepare($query);
     $stmt->execute($params);
     $payouts = $stmt->fetchAll();
@@ -86,28 +65,39 @@ if ($method === 'POST') {
         ], 400);
     }
 
+    $id = !empty($data['id']) ? $data['id'] : 'pay_' . time() . '_' . bin2hex(random_bytes(3));
     $artistId = $data['artistId'];
+    $artistName = $data['artistName'] ?? 'Atis UpMizik';
     $amount = (float)$data['amount'];
+    $currency = $data['currency'] ?? 'HTG';
+    $paymentMethod = $data['paymentMethod'] ?? 'MonCash';
+    $accountNumber = $data['accountNumber'] ?? $data['phone'] ?? '';
     $status = $data['status'] ?? 'pending';
     $notes = $data['notes'] ?? null;
-    $ref = $data['transactionReference'] ?? $notes;
 
     $stmt = $pdo->prepare("
-        UPDATE artistes 
-        SET montant_paye = ?,
-            reference_paiement = ?,
-            paye_ce_mois = ?
-        WHERE id = ?
+        INSERT INTO payouts (
+            id, artistId, artistName, amount, currency, paymentMethod,
+            accountNumber, status, notes, requestedAt, created_at
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, NOW(), NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            status = VALUES(status),
+            notes = VALUES(notes)
     ");
-    $stmt->execute([$amount, $ref, in_array($status, ['paid', 'approved']) ? 1 : 0, $artistId]);
 
-    $payoutId = 'pay_' . $artistId;
+    $stmt->execute([
+        $id, $artistId, $artistName, $amount, $currency, $paymentMethod,
+        $accountNumber, $status, $notes
+    ]);
 
     jsonResponse([
         'success' => true,
         'message' => 'Demann retrè anrejistre avèk siksè!',
-        'data' => ['payoutId' => $payoutId],
-        'payoutId' => $payoutId,
+        'data' => ['payoutId' => $id],
+        'payoutId' => $id,
         'errors' => []
     ], 201);
 }
@@ -125,17 +115,14 @@ if ($method === 'PUT' || $method === 'PATCH') {
         jsonResponse(['success' => false, 'message' => 'Id ak nouvo estati a obligatwa.'], 400);
     }
 
-    $targetId = str_starts_with($id, 'pay_') ? substr($id, 4) : $id;
-    $isPaid = in_array($status, ['approved', 'paid']) ? 1 : 0;
-
     $stmt = $pdo->prepare("
-        UPDATE artistes 
-        SET paye_ce_mois = ?, 
-            reference_paiement = COALESCE(?, reference_paiement),
-            date_paiement = CASE WHEN ? = 1 THEN NOW() ELSE date_paiement END
+        UPDATE payouts 
+        SET status = ?, 
+            transactionReference = COALESCE(?, transactionReference),
+            processedAt = CASE WHEN ? IN ('approved', 'paid') THEN NOW() ELSE processedAt END
         WHERE id = ?
     ");
-    $stmt->execute([$isPaid, $transactionRef, $isPaid, $targetId]);
+    $stmt->execute([$status, $transactionRef, $status, $id]);
 
     jsonResponse([
         'success' => true,

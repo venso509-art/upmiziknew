@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, Check, ChevronRight, X, Music } from 'lucide-react';
 
 interface FontOption {
@@ -97,10 +97,21 @@ export const FontSelectorModal: React.FC<FontSelectorModalProps> = ({
 }) => {
   const [selectedId, setSelectedId] = useState(currentFontId);
 
+  useEffect(() => {
+    setSelectedId(currentFontId);
+  }, [currentFontId]);
+
   if (!isOpen) return null;
 
   const handleApply = (option: FontOption) => {
     setSelectedId(option.id);
+    const title = option.titleFont || option.fontFamilyCSS;
+    const body = option.bodyFont || option.fontFamilyCSS;
+    document.documentElement.style.setProperty('--app-font-family', body);
+    document.documentElement.style.setProperty('--app-font-title', title);
+    document.body.style.setProperty('--app-font-family', body);
+    document.body.style.setProperty('--app-font-title', title);
+    document.body.style.fontFamily = body;
     onSelectFont(option);
   };
 

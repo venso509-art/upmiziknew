@@ -62,6 +62,7 @@ const KEYS = {
   ADMIN_MASTER_KEY: 'upmizik_admin_master_key_v1',
   INTRUSION_LOGS: 'upmizik_intrusion_logs_v1',
   ACTIVITY_LOGS: 'upmizik_activity_logs_v1',
+  ACTIVITY_LOGS_INITIALIZED: 'upmizik_activity_logs_initialized_v1',
   ADMIN_LOCKOUT: 'upmizik_admin_lockout_v1',
   ARTIST_RATE_LIMITS: 'upmizik_artist_rate_limits_v1',
   SITE_VISITS: 'upmizik_site_visits_v1',
@@ -1776,7 +1777,7 @@ export const StorageService = {
       ipPlaceholder: 'Koneksyon lokal / Pwoteje',
       status: 'alert',
       unlockToken: unlockToken,
-      notes: data.notes || `Tantativ aksè san otorizasyon repete 3 fwa sou Espas Admin UpMizik. Kòd deblokaj voye bay ciblesecurity404@um.com: ${unlockToken}`
+      notes: data.notes || `🚨 Tantativ aksè san otorizasyon repete 3 fwa sou Espas Admin UpMizik. Kòd deblokaj ak rapò voye bay imèl ofisyèl upmizik@gmail.com: ${unlockToken}`
     };
 
     const currentLogs = StorageService.getIntrusionLogs();
@@ -1785,6 +1786,25 @@ export const StorageService = {
 
     // Lockout admin login attempts globally for 15 minutes
     StorageService.setAdminLockout(15);
+
+    // Attempt syncing with MySQL backend
+    try {
+      if (typeof fetch !== 'undefined') {
+        fetch('/backend/api/security.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            attemptedEmail: newLog.attemptedEmail,
+            attemptCount: newLog.attemptCount,
+            stage: newLog.stage,
+            photoUrl: newLog.photoUrl,
+            userAgent: newLog.userAgent,
+            officialEmail: 'upmizik@gmail.com',
+            notes: newLog.notes
+          })
+        }).catch(() => {});
+      }
+    } catch (_) {}
 
     return newLog;
   },
@@ -1798,54 +1818,71 @@ export const StorageService = {
     const updated = current.filter(l => l.id !== logId);
     StorageService.saveIntrusionLogs(updated);
   },
+  clearIntrusionLogs: () => {
+    StorageService.saveIntrusionLogs([]);
+  },
 
   // ACTIVITY & AUTH LOGS MANAGEMENT
   getActivityLogs: (): ActivityLogItem[] => {
+    const isInitialized = typeof window !== 'undefined' && localStorage.getItem(KEYS.ACTIVITY_LOGS_INITIALIZED);
     const logs = getStoredData<ActivityLogItem[]>(KEYS.ACTIVITY_LOGS, []);
-    if (!logs || logs.length === 0) {
-      // Seed sample activity logs for realistic initial display
-      const initialLogs: ActivityLogItem[] = [
-        {
-          id: 'act_log_init_1',
-          eventType: 'echec_connexion_pending',
-          email: 'kingposse@upmizik.com',
-          artistId: 'art_pending_1',
-          artistName: 'King Posse Next Gen',
-          reason: 'Atis la eseye konekte nan artist_dashboard men kont li an atant validasyon $4.99 toujou pa Administratè a.',
-          ipAddress: '190.115.178.42',
-          userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15',
-          status: 'warning',
-          timestamp: new Date(Date.now() - 1000 * 60 * 18).toISOString()
-        },
-        {
-          id: 'act_log_init_2',
-          eventType: 'echec_connexion_identifiants',
-          email: 'blazeone@gmail.com',
-          artistId: 'art_1',
-          artistName: 'Blaze One',
-          reason: 'Kòd PIN oswa modpas sekrè a enkòrèk pou atis sa a.',
-          ipAddress: '165.225.208.91',
-          userAgent: 'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36',
-          status: 'error',
-          timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString()
-        },
-        {
-          id: 'act_log_init_3',
-          eventType: 'echec_connexion_identifiants',
-          email: 'ti_tonton_rap@yahoo.com',
-          reason: 'Imèl oswa kontak sa a pa jwenn nan baz done atis la.',
-          ipAddress: '190.115.176.12',
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/123.0.0.0',
-          status: 'error',
-          timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString()
-        }
-      ];
-      setStoredData(KEYS.ACTIVITY_LOGS, initialLogs);
-      return initialLogs;
+
+    // Only seed sample logs ONCE on very first launch so user deletions/clears are permanently respected
+    if (!isInitialized) {
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(KEYS.ACTIVITY_LOGS_INITIALIZED, 'true');
+        } catch (_) {}
+      }
+      if (!logs || logs.length === 0) {
+        const initialLogs: ActivityLogItem[] = [
+          {
+            id: 'act_log_init_1',
+            eventType: 'echec_connexion_pending',
+            email: 'kingposse@upmizik.com',
+            artistId: 'art_pending_1',
+            artistName: 'King Posse Next Gen',
+            reason: 'Atis la eseye konekte nan artist_dashboard men kont li an atant validasyon $4.99 toujou pa Administratè a.',
+            ipAddress: '190.115.178.42',
+            userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15',
+            status: 'warning',
+            timestamp: new Date(Date.now() - 1000 * 60 * 18).toISOString()
+          },
+          {
+            id: 'act_log_init_2',
+            eventType: 'echec_connexion_identifiants',
+            email: 'blazeone@gmail.com',
+            artistId: 'art_1',
+            artistName: 'Blaze One',
+            reason: 'Kòd PIN oswa modpas sekrè a enkòrèk pou atis sa a.',
+            ipAddress: '165.225.208.91',
+            userAgent: 'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36',
+            status: 'error',
+            timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString()
+          },
+          {
+            id: 'act_log_init_3',
+            eventType: 'echec_connexion_identifiants',
+            email: 'ti_tonton_rap@yahoo.com',
+            reason: 'Imèl oswa kontak sa a pa jwenn nan baz done atis la.',
+            ipAddress: '190.115.176.12',
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/123.0.0.0',
+            status: 'error',
+            timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString()
+          }
+        ];
+        setStoredData(KEYS.ACTIVITY_LOGS, initialLogs);
+        return initialLogs;
+      }
     }
-    return logs;
+    return logs || [];
   },
   saveActivityLogs: (list: ActivityLogItem[]) => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(KEYS.ACTIVITY_LOGS_INITIALIZED, 'true');
+      } catch (_) {}
+    }
     setStoredData(KEYS.ACTIVITY_LOGS, list);
   },
   addActivityLog: (data: Omit<ActivityLogItem, 'id' | 'timestamp'> & { timestamp?: string }): ActivityLogItem => {
@@ -1869,7 +1906,7 @@ export const StorageService = {
     // Optional background sync with PHP backend API
     try {
       if (typeof fetch !== 'undefined') {
-        fetch('/api.php?action=log_activity', {
+        fetch('/backend/api/security.php?action=log_activity', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1892,7 +1929,22 @@ export const StorageService = {
     StorageService.saveActivityLogs(updated);
   },
   clearActivityLogs: () => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(KEYS.ACTIVITY_LOGS_INITIALIZED, 'true');
+      } catch (_) {}
+    }
     StorageService.saveActivityLogs([]);
+  },
+  updateArtistPin: (artistId: string, newPin: string): boolean => {
+    const cleanPin = newPin.trim();
+    if (!cleanPin || cleanPin.length < 4) return false;
+    const artists = StorageService.getArtists();
+    const target = artists.find(a => a.id === artistId);
+    if (!target) return false;
+    const updated = artists.map(a => a.id === artistId ? { ...a, pin: cleanPin } : a);
+    StorageService.saveArtists(updated);
+    return true;
   },
 
   // Lockout Management (15 minutes lockout after 3 failed attempts)

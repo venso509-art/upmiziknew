@@ -10,17 +10,6 @@ require_once dirname(__DIR__) . '/middleware/auth.php';
 $pdo = getDBConnection();
 $method = $_SERVER['REQUEST_METHOD'];
 
-function mapStatusToFrontend(string $status): string {
-    return match (strtolower($status)) {
-        'actif' => 'active',
-        'en_attente' => 'pending',
-        'rejete' => 'rejected',
-        'suspendu' => 'suspended',
-        'valide' => 'validated',
-        default => $status
-    };
-}
-
 // ----------------------------------------------------------
 // GET: Tcheke Sesyon aktif oswa mande CSRF Token
 // ----------------------------------------------------------
@@ -122,21 +111,8 @@ if ($method === 'POST') {
             ], 429);
         }
 
-        // Tcheke nan tab `utilisateurs`
-        $stmt = $pdo->prepare("
-            SELECT 
-                id,
-                nom AS username,
-                nom AS name,
-                email,
-                mot_de_passe AS password_hash,
-                role,
-                statut AS status
-            FROM utilisateurs 
-            WHERE (LOWER(nom) = LOWER(?) OR LOWER(email) = LOWER(?)) 
-              AND statut = 'actif' 
-            LIMIT 1
-        ");
+        // Tcheke nan tab `admins`
+        $stmt = $pdo->prepare("SELECT * FROM admins WHERE (LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)) AND status = 'active' LIMIT 1");
         $stmt->execute([$username, $username]);
         $admin = $stmt->fetch();
 
@@ -175,9 +151,9 @@ if ($method === 'POST') {
             $_SESSION['LAST_ACTIVITY'] = time();
             recordLoginAttempt($pdo, $username, $adminData['email'], $ip, true);
 
-            // Mete ajou derniere_connexion si se nan tab utilisateurs
+            // Mete ajou last_login si se nan tab admins
             if ($admin && isset($admin['id'])) {
-                $updateLogin = $pdo->prepare("UPDATE utilisateurs SET derniere_connexion = NOW() WHERE id = ?");
+                $updateLogin = $pdo->prepare("UPDATE admins SET last_login = NOW() WHERE id = ?");
                 $updateLogin->execute([$admin['id']]);
             }
 
@@ -228,38 +204,8 @@ if ($method === 'POST') {
         }
 
         $stmt = $pdo->prepare("
-            SELECT 
-                id,
-                nom_scene AS stageName,
-                nom_complet AS name,
-                email,
-                telephone AS phone,
-                ville AS city,
-                pin,
-                avatar_url AS avatarUrl,
-                bio,
-                racines_musicales AS musicalRoots,
-                influences AS musicalInfluences,
-                vision_artistique AS artisticVision,
-                citation AS artistQuote,
-                statut AS status,
-                preuve_inscription_url AS registrationProofUrl,
-                raison_rejet AS registrationRejectionReason,
-                total_ecoutes AS totalListens,
-                total_dons_recus AS totalDonationsReceived,
-                youtube_url AS youtubeUrl,
-                instagram_url AS instagramUrl,
-                tiktok_url AS tiktokUrl,
-                banniere_url AS headerBannerUrl,
-                theme_banniere AS bannerGenreTheme,
-                paye_ce_mois AS isPaidThisMonth,
-                date_paiement AS paidDateThisMonth,
-                montant_paye AS paidAmountThisMonth,
-                reference_paiement AS paidReferenceThisMonth,
-                date_inscription AS registrationDate,
-                date_inscription AS created_at
-            FROM artistes 
-            WHERE (LOWER(email) = LOWER(?) OR telephone = ?)
+            SELECT * FROM artists 
+            WHERE (LOWER(email) = LOWER(?) OR phone = ?)
             LIMIT 1
         ");
         $stmt->execute([$identifier, $identifier]);
@@ -267,7 +213,6 @@ if ($method === 'POST') {
 
         if ($artist && ($artist['pin'] === $pin || password_verify($pin, $artist['pin']))) {
             session_regenerate_id(true);
-            $artist['status'] = mapStatusToFrontend($artist['status'] ?? 'actif');
             $artist['isPaidThisMonth'] = (bool)($artist['isPaidThisMonth'] ?? false);
             unset($artist['pin']);
 
@@ -313,7 +258,7 @@ if ($method === 'POST') {
             ], 400);
         }
 
-        $stmt = $pdo->prepare("SELECT id, pin FROM artistes WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT id, pin FROM artists WHERE id = ?");
         $stmt->execute([$artistId]);
         $artist = $stmt->fetch();
 
@@ -327,7 +272,7 @@ if ($method === 'POST') {
         }
 
         $hashedNewPin = password_hash($newPin, PASSWORD_BCRYPT, ['cost' => 10]);
-        $update = $pdo->prepare("UPDATE artistes SET pin = ? WHERE id = ?");
+        $update = $pdo->prepare("UPDATE artists SET pin = ? WHERE id = ?");
         $update->execute([$hashedNewPin, $artistId]);
 
         jsonResponse([
