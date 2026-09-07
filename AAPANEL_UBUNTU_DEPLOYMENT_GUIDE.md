@@ -199,19 +199,28 @@ Klike sou **Save**.
 ---
 
 ## 8. Permissions pou Dosye `/www/wwwroot/upmizik.com`
-Pou asire Nginx ak PHP ka li epi ekri fichye upload (mizik, foto kouvèti) san erè 403 oswa 500:
+Pou asire Nginx ak PHP ka li epi ekri fichye upload (mizik, foto kouvèti) san erè 403 oswa 500, epi san okenn pwoblèm ak fichye pwoteje tankou `.user.ini`:
 
-Egzekite kòmand sa yo nan terminal SSH:
+Nou kreye script dedye a: `/www/wwwroot/upmizik.com/set-safe-permissions.sh`.
+
+Egzekite kòmand sa a nan terminal SSH:
 
 ```bash
-# Mete itilizatè www (ki se itilizatè Nginx/aaPanel sou Ubuntu) kòm mèt tout dosye yo:
-sudo chown -R www:www /www/wwwroot/upmizik.com
+# Bay script la pèmisyon ekzekisyon epi kouri l:
+chmod +x /www/wwwroot/upmizik.com/set-safe-permissions.sh
+sudo /www/wwwroot/upmizik.com/set-safe-permissions.sh /www/wwwroot/upmizik.com
+```
 
-# Otorize lekti ak ekriti estanda:
-sudo find /www/wwwroot/upmizik.com -type d -exec chmod 755 {} \;
-sudo find /www/wwwroot/upmizik.com -type f -exec chmod 644 {} \;
+Oswa si ou prefere fè l alamen ak kòmand `find` dirèk:
+```bash
+# 1. Chanje pwopriyetè pou www-data (oswa www) san manyen .user.ini ak .git:
+sudo find /www/wwwroot/upmizik.com -name ".git" -prune -o -name ".user.ini" -prune -o -exec chown www-data:www-data {} + 2>/dev/null || sudo chown -R www:www /www/wwwroot/upmizik.com 2>/dev/null
 
-# Bay dosye uploads ak logs pèmisyon ekriti espesyal pou PHP:
+# 2. Mete pèmisyon estanda pou dosye (755) ak fichye (644):
+sudo find /www/wwwroot/upmizik.com -name ".git" -prune -o -type d -exec chmod 755 {} +
+sudo find /www/wwwroot/upmizik.com -name ".git" -prune -o -name ".user.ini" -prune -o -type f -exec chmod 644 {} +
+
+# 3. Bay dosye uploads ak logs pèmisyon ekriti espesyal pou PHP (775):
 sudo chmod -R 775 /www/wwwroot/upmizik.com/backend/uploads
 sudo chmod -R 775 /www/wwwroot/upmizik.com/backend/logs
 ```

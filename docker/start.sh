@@ -8,10 +8,22 @@ mkdir -p /var/www/html/backend/uploads/music \
          /var/www/html/backend/uploads/avatars \
          /var/www/html/backend/uploads/banners \
          /var/www/html/backend/uploads/media \
-         /var/www/html/backend/uploads/general
+         /var/www/html/backend/uploads/tracks \
+         /var/www/html/backend/uploads/general \
+         /var/www/html/backend/logs \
+         /var/www/html/backend/backups
 
-chown -R www-data:www-data /var/www/html/backend/uploads
-chmod -R 775 /var/www/html/backend/uploads
+chown -R www-data:www-data /var/www/html/backend/uploads /var/www/html/backend/logs /var/www/html/backend/backups
+chmod -R 775 /var/www/html/backend/uploads /var/www/html/backend/logs /var/www/html/backend/backups
+
+# Konfigire PHP settings pou gwo upload (mizik MP3 jiska 100MB)
+cat <<EOF > /usr/local/etc/php/conf.d/uploads.ini
+upload_max_filesize = 100M
+post_max_size = 100M
+memory_limit = 256M
+max_execution_time = 300
+max_input_time = 300
+EOF
 
 # Asire PHP-FPM pa efase varyab anviwònman Docker yo (clear_env = no)
 if [ -d "/usr/local/etc/php-fpm.d" ]; then

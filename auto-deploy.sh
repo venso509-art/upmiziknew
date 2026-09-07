@@ -56,14 +56,20 @@ mkdir -p $WEB_ROOT/backend/uploads/tracks
 mkdir -p $WEB_ROOT/backend/uploads/avatars
 mkdir -p $WEB_ROOT/backend/logs
 
-# 7. Ranje tout pèmisyon yo nèt (www:www)
-echo "🔒 5/5: Ap aplike bon pèmisyon sekirite (www:www)..."
-sudo chown -R www:www $WEB_ROOT
-sudo find $WEB_ROOT -type d -exec chmod 755 {} \;
-sudo find $WEB_ROOT -type f -exec chmod 644 {} \;
-sudo chmod -R 775 $WEB_ROOT/backend/uploads
-sudo chmod -R 775 $WEB_ROOT/backend/logs
-chmod +x $WEB_ROOT/auto-deploy.sh || true
+# 7. Ranje tout pèmisyon yo nèt avèk script sekirite a
+echo "🔒 5/5: Ap aplike bon pèmisyon sekirite ak pwopriyetè Nginx..."
+if [ -f "$WEB_ROOT/set-safe-permissions.sh" ]; then
+    chmod +x "$WEB_ROOT/set-safe-permissions.sh"
+    sudo "$WEB_ROOT/set-safe-permissions.sh" "$WEB_ROOT"
+else
+    # Fallback si script la pa la
+    sudo find "$WEB_ROOT" -name ".user.ini" -prune -o -name ".git" -prune -o -exec chown www-data:www-data {} + 2>/dev/null || sudo chown -R www:www "$WEB_ROOT" 2>/dev/null || true
+    sudo find "$WEB_ROOT" -name ".git" -prune -o -type d -exec chmod 755 {} + 2>/dev/null || true
+    sudo find "$WEB_ROOT" -name ".git" -prune -o -name ".user.ini" -prune -o -type f -exec chmod 644 {} + 2>/dev/null || true
+    sudo chmod -R 775 "$WEB_ROOT/backend/uploads" 2>/dev/null || true
+    sudo chmod -R 775 "$WEB_ROOT/backend/logs" 2>/dev/null || true
+fi
+chmod +x "$WEB_ROOT/auto-deploy.sh" "$WEB_ROOT/set-safe-permissions.sh" 2>/dev/null || true
 
 echo "========================================================"
 echo "✅ TOUT BAGAY FIN PARE E DEPLWAYE AVÈK SIKSÈ!"
