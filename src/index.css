@@ -9,14 +9,12 @@
   html {
     touch-action: manipulation;
     -webkit-text-size-adjust: 100%;
-    overflow-x: clip;
   }
 
   body {
     background-color: #05070a;
     color: #f1f5f9;
     font-family: var(--app-font-family), sans-serif;
-    overflow-x: clip;
     -webkit-overflow-scrolling: touch;
     transition: background-color 0.25s ease, color 0.25s ease;
   }

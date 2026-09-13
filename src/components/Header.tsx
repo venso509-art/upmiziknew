@@ -89,9 +89,10 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header 
       id="main-app-header"
-      className={`sticky top-0 z-50 w-full backdrop-blur-xl border-b transition-colors duration-200 ${
+      style={{ position: 'sticky', top: 0, zIndex: 100 }}
+      className={`sticky top-0 z-[100] w-full backdrop-blur-xl border-b transition-colors duration-200 shadow-sm ${
         themeMode === 'light'
-          ? 'bg-white/95 border-slate-200/90 shadow-sm'
+          ? 'bg-white/95 border-slate-200/90'
           : 'bg-[#05070a]/95 border-white/[0.08]'
       }`}
     >
