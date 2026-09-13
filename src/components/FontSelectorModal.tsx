@@ -116,7 +116,7 @@ export const FontSelectorModal: React.FC<FontSelectorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 pt-6 bg-black/80 backdrop-blur-md animate-fadeIn">
       <div className="relative w-full max-w-4xl max-h-[90vh] bg-[#0c1017] border border-white/15 rounded-3xl p-6 sm:p-8 overflow-y-auto shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between pb-6 border-b border-white/10">

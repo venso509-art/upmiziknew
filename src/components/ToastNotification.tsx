@@ -5,6 +5,7 @@ export interface ToastMessage {
   id: string;
   type: 'success' | 'error' | 'info';
   text: string;
+  targetRole?: 'admin' | 'artist' | 'public' | 'all';
 }
 
 interface ToastNotificationProps {

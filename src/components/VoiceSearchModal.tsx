@@ -253,7 +253,7 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
   return (
     <div
       id="voice-search-modal-backdrop"
-      className="fixed inset-0 z-50 overflow-y-auto modal-backdrop-scroll bg-black/80 backdrop-blur-md p-2 sm:p-4 animate-fadeIn"
+      className="fixed inset-0 z-[200] overflow-y-auto modal-backdrop-scroll bg-black/80 backdrop-blur-md p-2 sm:p-4 pt-4 sm:pt-6 animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

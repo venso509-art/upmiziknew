@@ -727,8 +727,8 @@ export const StorageService = {
       }
     });
 
-    // Active or valid artists
-    const availableArtists = artists.filter(a => a.status !== 'rejected');
+    // Active and validated artists only (excluding pending, rejected or suspended)
+    const availableArtists = artists.filter(a => a && (a.status === 'active' || !a.status) && a.status !== 'pending' && a.status !== 'rejected' && a.status !== 'suspended');
     const result: { artist: ArtistUser; listenCount: number; isFromHistory: boolean; category?: MusicCategory }[] = [];
     const selectedIds = new Set<string>();
 

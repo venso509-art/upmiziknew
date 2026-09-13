@@ -109,7 +109,7 @@ export const OfficialCertificateModal: React.FC<OfficialCertificateModalProps> =
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto modal-backdrop-scroll bg-black/90 backdrop-blur-xl flex items-center justify-center p-2 sm:p-4 lg:p-6 animate-fadeIn"
+      className="fixed inset-0 z-[200] overflow-y-auto modal-backdrop-scroll bg-black/90 backdrop-blur-xl flex items-center justify-center p-2 sm:p-4 pt-4 sm:pt-6 lg:p-6 animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

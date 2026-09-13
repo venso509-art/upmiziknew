@@ -186,7 +186,7 @@ export const BulkArtistSuspendModal: React.FC<BulkArtistSuspendModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-xl animate-fadeIn p-2 sm:p-4"
+      className="fixed inset-0 z-[200] overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-xl animate-fadeIn p-2 sm:p-4 pt-4 sm:pt-6"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -361,7 +361,7 @@ export const BulkArtistRejectModal: React.FC<BulkArtistRejectModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-xl animate-fadeIn p-2 sm:p-4"
+      className="fixed inset-0 z-[200] overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-xl animate-fadeIn p-2 sm:p-4 pt-4 sm:pt-6"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

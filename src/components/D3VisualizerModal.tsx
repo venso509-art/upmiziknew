@@ -33,7 +33,7 @@ export const D3VisualizerModal: React.FC<D3VisualizerModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-2xl animate-fadeIn select-none p-2 sm:p-4"
+      className="fixed inset-0 z-[200] overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-2xl animate-fadeIn select-none p-2 sm:p-4 pt-4 sm:pt-6"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

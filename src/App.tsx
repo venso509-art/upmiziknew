@@ -235,12 +235,59 @@ export default function App() {
   const [playbackSeconds, setPlaybackSeconds] = useState(0);
   const [hasListened5s, setHasListened5s] = useState(false);
 
-  // Toasts
+  // Toasts ak Verifikasyon Wòl Itilizatè Strik (Role-Based Notification Guard)
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const addToast = (type: 'success' | 'error' | 'info', text: string) => {
+  const addToast = (
+    type: 'success' | 'error' | 'info',
+    text: string,
+    targetRole: 'admin' | 'artist' | 'public' | 'all' = 'all'
+  ) => {
+    // 1. Verifikasyon wòl itilizatè a:
+    // Asire w ke notifikasyon 'admin' yo sèlman parèt pou currentAdmin epi yo pa parèt pou currentArtist oswa itilizatè piblik yo.
+    if (targetRole === 'admin' && !currentAdmin) {
+      return;
+    }
+
+    // 2. Si notifikasyon an rezève pou 'artist', sèlman montre l si gen yon atis ki konekte
+    if (targetRole === 'artist' && !currentArtist) {
+      return;
+    }
+
+    // 3. Si notifikasyon an se pou itilizatè 'public', pa afiche l pou yon admin ki nan sesyon
+    if (targetRole === 'public' && currentAdmin) {
+      return;
+    }
+
+    // 4. Verifikasyon kontèks semantik otomatik:
+    // Detekte tout mesaj oswa alèt ki lye ak operasyon jesyon administratè
+    // pou anpeche yo janm parèt sou ekran yon atis oswa yon vizitè piblik
+    const lowerText = text.toLowerCase();
+    const isAdminNotice =
+      lowerText.includes('konekte kòm administratè') ||
+      lowerText.includes('ou sòti nan espas administratè') ||
+      lowerText.includes('sipò valide! 85% ajoute') ||
+      lowerText.includes('sipò refize') ||
+      lowerText.includes('kont atis verifye & valide') ||
+      lowerText.includes('enskripsyon atis refize') ||
+      lowerText.includes('tout demand ki te an atant yo vide') ||
+      lowerText.includes('mete an sispansyon pou') ||
+      lowerText.includes('sispansyon') && lowerText.includes('leve avèk siksè') ||
+      lowerText.includes('make kòm peye') ||
+      lowerText.includes('retounen sou "poko peye"') ||
+      lowerText.includes('piblisite yo mete ajou') ||
+      lowerText.includes('ribrik pouse atis (rpa) mete ajou') ||
+      lowerText.includes('tout sipò yo fin achive e reset') ||
+      lowerText.includes('konfigirasyon top 3 anrejistre') ||
+      (lowerText.includes('nouvo atis') && lowerText.includes('an atant validasyon')) ||
+      (lowerText.includes('nouvo sipò') && lowerText.includes('an atant validasyon'));
+
+    if (isAdminNotice && !currentAdmin) {
+      return;
+    }
+
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-    setToasts((prev) => [...prev, { id, type, text }]);
+    setToasts((prev) => [...prev, { id, type, text, targetRole }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 4000);
@@ -754,6 +801,11 @@ export default function App() {
     return [...activeList].sort((a, b) => b.listens - a.listens).slice(0, 3);
   }, [musicList, top3Override]);
 
+  // Active/Approved Artists only (Exclude pending registration or rejected/suspended artists from public view)
+  const activeArtists = useMemo(() => {
+    return (artists || []).filter(a => a && (a.status === 'active' || !a.status) && a.status !== 'pending' && a.status !== 'rejected' && a.status !== 'suspended');
+  }, [artists]);
+
   // Filtered Music List for Feed (Only active/published tracks are public)
   const filteredMusic = useMemo(() => {
     return musicList.filter((item) => {
@@ -896,6 +948,8 @@ export default function App() {
     HostingerService.saveSingleArtist(newArtist);
     setArtists(StorageService.getArtists());
     addToast('success', `Kont ou kreye avèk siksè! Prèv $4.99 la voye bay Admin.`);
+    // Alèt admin: SÈLMAN pou currentAdmin, li p ap janm parèt pou atis oswa itilizatè piblik
+    addToast('info', `🔔 Nouvo atis "${newArtist.stageName}" an atant validasyon nan panèl Admin an.`, 'admin');
   };
 
   const handleAdminLoginSuccess = (admin: AdminUser) => {
@@ -907,14 +961,14 @@ export default function App() {
     setDonations(StorageService.getDonations(admin));
     setArchives(StorageService.getArchives(admin));
     setCurrentView('admin_dashboard');
-    addToast('success', `Konekte kòm Administratè: ${admin.name}`);
+    addToast('success', `Konekte kòm Administratè: ${admin.name}`, 'admin');
   };
 
   const handleLogoutArtist = () => {
     setCurrentArtist(null);
     StorageService.setLoggedInArtist(null);
     setCurrentView('public');
-    addToast('info', 'Ou dekonekte nan Espas Atis.');
+    addToast('info', 'Ou dekonekte nan Espas Atis.', 'artist');
   };
 
   const handleLogoutAdmin = () => {
@@ -924,7 +978,7 @@ export default function App() {
     setDonations([]);
     setArchives([]);
     setCurrentView('public');
-    addToast('info', 'Ou sòti nan Espas Administratè.');
+    addToast('info', 'Ou sòti nan Espas Administratè.', 'admin');
   };
 
   // Add Music Handler (Artist & Admin)
@@ -1021,7 +1075,7 @@ export default function App() {
   const handleSaveTop3Override = (override: { enabled: boolean; topIds: string[] }) => {
     StorageService.saveTop3Override(override);
     setTop3Override(override);
-    addToast('success', 'Konfigirasyon Top 3 anrejistre!');
+    addToast('success', 'Konfigirasyon Top 3 anrejistre!', 'admin');
   };
 
   const handleValidateDonation = (donationId: string, accept: boolean) => {
@@ -1040,10 +1094,11 @@ export default function App() {
     if (accept && result.generatedEmail) {
       addToast(
         'success',
-        `💰 Sipò valide! Alèt imèl voye otomatikman nan bwat lèt ${result.generatedEmail.artistName} (upmizik.com).`
+        `💰 Sipò valide! Alèt imèl voye otomatikman nan bwat lèt ${result.generatedEmail.artistName} (upmizik.com).`,
+        'admin'
       );
     } else {
-      addToast(accept ? 'success' : 'info', accept ? 'Sipò valide! 85% ajoute pou atis la.' : 'Sipò refize.');
+      addToast(accept ? 'success' : 'info', accept ? 'Sipò valide! 85% ajoute pou atis la.' : 'Sipò refize.', 'admin');
     }
   };
 
@@ -1100,16 +1155,18 @@ export default function App() {
       if (accept) {
         addToast(
           'success',
-          `✅ Kont Atis "${result.artist.stageName}" valide! Imèl konfimasyon voye sou ${result.artist.email}.`
+          `✅ Kont Atis "${result.artist.stageName}" valide! Imèl konfimasyon voye sou ${result.artist.email}.`,
+          'admin'
         );
       } else {
         addToast(
           'info',
-          `⚠️ Enskripsyon "${result.artist.stageName}" refize. Imèl notifikasyon voye sou ${result.artist.email}.`
+          `⚠️ Enskripsyon "${result.artist.stageName}" refize. Imèl notifikasyon voye sou ${result.artist.email}.`,
+          'admin'
         );
       }
     } else {
-      addToast(accept ? 'success' : 'info', accept ? 'Kont Atis verifye & valide!' : 'Enskripsyon atis refize.');
+      addToast(accept ? 'success' : 'info', accept ? 'Kont Atis verifye & valide!' : 'Enskripsyon atis refize.', 'admin');
     }
   };
 
@@ -1126,7 +1183,8 @@ export default function App() {
     setDonations(StorageService.getDonations(currentAdmin));
     addToast(
       'success',
-      `Tout demand ki te an atant yo vide nèt! (${purgedArtists} atis, ${purgedDonations} don retire)`
+      `Tout demand ki te an atant yo vide nèt! (${purgedArtists} atis, ${purgedDonations} don retire)`,
+      'admin'
     );
   };
 
@@ -1153,7 +1211,8 @@ export default function App() {
     if (result.artist) {
       addToast(
         'info',
-        `⚠️ Atis "${result.artist.stageName}" mete an sispansyon pou ${days} jou. Imèl avètisman voye sou ${result.artist.email}.`
+        `⚠️ Atis "${result.artist.stageName}" mete an sispansyon pou ${days} jou. Imèl avètisman voye sou ${result.artist.email}.`,
+        'admin'
       );
     }
   };
@@ -1181,7 +1240,8 @@ export default function App() {
     if (result.artist) {
       addToast(
         'success',
-        `✅ Sispansyon "${result.artist.stageName}" leve avèk siksè! Kont lan re-aktif kounye a.`
+        `✅ Sispansyon "${result.artist.stageName}" leve avèk siksè! Kont lan re-aktif kounye a.`,
+        'admin'
       );
     }
   };
@@ -1201,7 +1261,7 @@ export default function App() {
       setCurrentView('public');
     }
 
-    addToast('info', `Kont atis "${target?.stageName || ''}" siprime nèt sou platfòm nan.`);
+    addToast('info', `Kont atis "${target?.stageName || ''}" siprime nèt sou platfòm nan.`, 'admin');
   };
 
   const handleToggleArtistPaymentStatus = (
@@ -1240,10 +1300,11 @@ export default function App() {
     if (isPaid) {
       addToast(
         'success',
-        `💰 Peman pou "${res.artist?.stageName}" make kòm PEYE (✅). Notifikasyon otomatik voye nan bwat mesaj li!`
+        `💰 Peman pou "${res.artist?.stageName}" make kòm PEYE (✅). Notifikasyon otomatik voye nan bwat mesaj li!`,
+        'admin'
       );
     } else {
-      addToast('info', `Estati peman pou "${res.artist?.stageName}" retounen sou "Poko Peye".`);
+      addToast('info', `Estati peman pou "${res.artist?.stageName}" retounen sou "Poko Peye".`, 'admin');
     }
   };
 
@@ -1251,14 +1312,14 @@ export default function App() {
     StorageService.savePubs(newPubs);
     HostingerService.syncPubs(newPubs);
     setPubs(newPubs);
-    addToast('success', 'Piblisite yo mete ajou!');
+    addToast('success', 'Piblisite yo mete ajou!', 'admin');
   };
 
   const handleSaveRpa = (newRpa: RpaItem[]) => {
     StorageService.saveRpa(newRpa);
     HostingerService.syncRpa(newRpa);
     setRpaList(newRpa);
-    addToast('success', 'Ribrik Pouse Atis (RPA) mete ajou!');
+    addToast('success', 'Ribrik Pouse Atis (RPA) mete ajou!', 'admin');
   };
 
   const handleResetMonthlyDonations = (periodName?: string) => {
@@ -1266,7 +1327,7 @@ export default function App() {
     setMusicList(StorageService.getMusic());
     setDonations(StorageService.getDonations(currentAdmin));
     setArchives(StorageService.getArchives(currentAdmin));
-    addToast('success', 'Tout sipò yo fin achive e reset a $0.00 pou nouvo mwa a!');
+    addToast('success', 'Tout sipò yo fin achive e reset a $0.00 pou nouvo mwa a!', 'admin');
   };
 
   // Support Submission
@@ -1280,6 +1341,12 @@ export default function App() {
     addToast(
       'success',
       `🎉 Mèsi ${newDonation.donorName}! Prèv sipò w la pou ${newDonation.artistName} voye bay Admin pou validasyon!`
+    );
+    // Notifikasyon admin: SÈLMAN pou currentAdmin
+    addToast(
+      'info',
+      `🔔 Nouvo sipò $${newDonation.amount} pou ${newDonation.artistName} an atant validasyon.`,
+      'admin'
     );
   };
 
@@ -1298,11 +1365,12 @@ export default function App() {
         currentView={currentView}
         currentArtist={currentArtist}
         currentAdmin={currentAdmin}
+        pendingArtistsCount={currentAdmin ? artists.filter((a) => a && a.status === 'pending').length : 0}
         setCurrentView={setCurrentView}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         musicList={musicList}
-        artists={artists}
+        artists={activeArtists}
         currentPlayingId={currentTrack?.id || null}
         isPlaying={isPlaying}
         onPlayToggle={handlePlayToggle}
@@ -1342,7 +1410,7 @@ export default function App() {
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
               musicList={musicList}
-              artists={artists}
+              artists={activeArtists}
               currentPlayingId={currentTrack?.id || null}
               isPlaying={isPlaying}
               onPlayToggle={handlePlayToggle}
@@ -1350,7 +1418,7 @@ export default function App() {
               onOpenArtistProfile={handleOpenArtistProfile}
               onSelectCategory={handleSelectCategory}
               onOpenArtistAuth={() => setShowArtistAuth(true)}
-              totalArtists={artists.length}
+              totalArtists={activeArtists.length}
               totalSongs={musicList.length}
             />
 
@@ -1371,7 +1439,7 @@ export default function App() {
             {/* WhatsApp-Style Artist Story & Profile Circles (Top 5 Listened / Algorithmic Recommendations) */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <ArtistStoryBar
-                artists={artists}
+                artists={activeArtists}
                 musicList={musicList}
                 onOpenArtistProfile={handleOpenArtistProfile}
               />
@@ -1380,7 +1448,7 @@ export default function App() {
             {/* Top 10 Artist Leaderboard (Klasman Atis Pa Donasyon) */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <ArtistLeaderboard
-                artists={artists}
+                artists={activeArtists}
                 musicList={musicList}
                 currentPlayingId={currentTrack?.id || null}
                 isPlaying={isPlaying}
@@ -1481,7 +1549,7 @@ export default function App() {
           <div className="py-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-fadeIn">
             <UpMizikSocial
               posts={socialPosts}
-              artists={artists}
+              artists={activeArtists}
               musicList={musicList}
               currentArtist={currentArtist}
               currentPlayingId={currentTrack?.id || null}
@@ -1588,7 +1656,7 @@ export default function App() {
         hasActivePlayer={Boolean(currentTrack)}
         themeMode={themeMode}
         onToggleTheme={handleToggleTheme}
-        pendingArtistsCount={artists.filter((a) => a && a.status === 'pending').length}
+        pendingArtistsCount={currentAdmin ? artists.filter((a) => a && a.status === 'pending').length : 0}
       />
 
       {/* Footer */}
@@ -1599,131 +1667,157 @@ export default function App() {
       />
 
       {/* MODAL 2: COMMENTS & MODERATION MODAL */}
-      <CommentModal
-        music={musicForComment}
-        currentAdmin={currentAdmin}
-        isAdmin={Boolean(currentAdmin)}
-        onClose={() => {
-          setMusicForComment(null);
-          clearDeepLinkUrlParams();
-        }}
-        onUpdateCommentCount={(musicId, count) => {
-          setMusicList((prev) =>
-            prev.map((m) => (m.id === musicId ? { ...m, commentsCount: count } : m))
-          );
-        }}
-      />
+      {musicForComment && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <CommentModal
+            music={musicForComment}
+            currentAdmin={currentAdmin}
+            isAdmin={Boolean(currentAdmin)}
+            onClose={() => {
+              setMusicForComment(null);
+              clearDeepLinkUrlParams();
+            }}
+            onUpdateCommentCount={(musicId, count) => {
+              setMusicList((prev) =>
+                prev.map((m) => (m.id === musicId ? { ...m, commentsCount: count } : m))
+              );
+            }}
+          />
+        </div>
+      )}
 
       {/* MODAL 3: ARTIST PUBLIC PROFILE */}
-      <ArtistProfileModal
-        artist={selectedArtistForProfile}
-        artistSongs={
-          selectedArtistForProfile
-            ? musicList.filter(
-                (m) =>
-                  m.artistId === selectedArtistForProfile.id ||
-                  m.collab?.artistId === selectedArtistForProfile.id ||
-                  (m.artistName && selectedArtistForProfile.stageName && m.artistName.trim().toLowerCase() === selectedArtistForProfile.stageName.trim().toLowerCase()) ||
-                  (m.collab?.artistName && selectedArtistForProfile.stageName && m.collab.artistName.trim().toLowerCase() === selectedArtistForProfile.stageName.trim().toLowerCase())
-              )
-            : []
-        }
-        currentPlayingId={currentTrack?.id || null}
-        isPlaying={isPlaying}
-        onClose={() => {
-          setSelectedArtistForProfile(null);
-          clearDeepLinkUrlParams();
-        }}
-        onPlayToggle={handlePlayToggle}
-        onOpenSupport={(m) => setMusicToSupport(m)}
-        onOpenArtistProfile={handleOpenArtistProfile}
-      />
+      {selectedArtistForProfile && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <ArtistProfileModal
+            artist={selectedArtistForProfile}
+            artistSongs={
+              selectedArtistForProfile
+                ? musicList.filter(
+                    (m) =>
+                      m.artistId === selectedArtistForProfile.id ||
+                      m.collab?.artistId === selectedArtistForProfile.id ||
+                      (m.artistName && selectedArtistForProfile.stageName && m.artistName.trim().toLowerCase() === selectedArtistForProfile.stageName.trim().toLowerCase()) ||
+                      (m.collab?.artistName && selectedArtistForProfile.stageName && m.collab.artistName.trim().toLowerCase() === selectedArtistForProfile.stageName.trim().toLowerCase())
+                  )
+                : []
+            }
+            currentPlayingId={currentTrack?.id || null}
+            isPlaying={isPlaying}
+            onClose={() => {
+              setSelectedArtistForProfile(null);
+              clearDeepLinkUrlParams();
+            }}
+            onPlayToggle={handlePlayToggle}
+            onOpenSupport={(m) => setMusicToSupport(m)}
+            onOpenArtistProfile={handleOpenArtistProfile}
+          />
+        </div>
+      )}
 
       {/* MODAL 1: DONATION / SUPPORT MODAL */}
-      <SupportModal
-        music={musicToSupport}
-        onClose={() => {
-          setMusicToSupport(null);
-          clearDeepLinkUrlParams();
-        }}
-        onConfirmSupport={handleConfirmSupport}
-        onSubmitDonation={(data) => {
-          const newDonation: DonationItem = {
-            id: `don_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-            musicId: data.musicId,
-            musicTitle: data.musicTitle,
-            artistId: data.artistId,
-            artistName: data.artistName,
-            amount: data.amount,
-            currency: data.currency,
-            donorName: data.donorName,
-            donorPhone: data.donorPhone,
-            proofUrl: data.proofUrl,
-            status: 'pending',
-            createdAt: new Date().toISOString(),
-            artistShare: parseFloat((data.amount * 0.85).toFixed(2)),
-            platformShare: parseFloat((data.amount * 0.15).toFixed(2))
-          };
-          handleConfirmSupport(newDonation);
-        }}
-      />
+      {musicToSupport && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <SupportModal
+            music={musicToSupport}
+            onClose={() => {
+              setMusicToSupport(null);
+              clearDeepLinkUrlParams();
+            }}
+            onConfirmSupport={handleConfirmSupport}
+            onSubmitDonation={(data) => {
+              const newDonation: DonationItem = {
+                id: `don_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                musicId: data.musicId,
+                musicTitle: data.musicTitle,
+                artistId: data.artistId,
+                artistName: data.artistName,
+                amount: data.amount,
+                currency: data.currency,
+                donorName: data.donorName,
+                donorPhone: data.donorPhone,
+                proofUrl: data.proofUrl,
+                status: 'pending',
+                createdAt: new Date().toISOString(),
+                artistShare: parseFloat((data.amount * 0.85).toFixed(2)),
+                platformShare: parseFloat((data.amount * 0.15).toFixed(2))
+              };
+              handleConfirmSupport(newDonation);
+            }}
+          />
+        </div>
+      )}
 
       {/* MODAL 4: ARTIST SIGNUP / LOGIN MODAL */}
       {showArtistAuth && (
-        <ArtistAuthModal
-          onClose={() => {
-            setShowArtistAuth(false);
-            clearDeepLinkUrlParams();
-          }}
-          onLoginSuccess={handleArtistLoginSuccess}
-          onRegisterArtist={handleArtistRegister}
-          existingArtists={artists}
-        />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <ArtistAuthModal
+            onClose={() => {
+              setShowArtistAuth(false);
+              clearDeepLinkUrlParams();
+            }}
+            onLoginSuccess={handleArtistLoginSuccess}
+            onRegisterArtist={handleArtistRegister}
+            existingArtists={artists}
+          />
+        </div>
       )}
 
       {/* MODAL 5: ADMIN AUTH MODAL */}
       {showAdminAuth && (
-        <AdminAuthModal
-          onClose={() => {
-            setShowAdminAuth(false);
-            clearDeepLinkUrlParams();
-          }}
-          onLoginSuccess={handleAdminLoginSuccess}
-        />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <AdminAuthModal
+            onClose={() => {
+              setShowAdminAuth(false);
+              clearDeepLinkUrlParams();
+            }}
+            onLoginSuccess={handleAdminLoginSuccess}
+          />
+        </div>
       )}
 
       {/* MODAL 6: DEEP LINK & SOCIAL STORY SHARING MODAL */}
       {musicToShare && (
-        <ShareModal
-          music={musicToShare}
-          onClose={() => {
-            setMusicToShare(null);
-            clearDeepLinkUrlParams();
-          }}
-          onShareCompleted={handleShareCompleted}
-        />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <ShareModal
+            music={musicToShare}
+            onClose={() => {
+              setMusicToShare(null);
+              clearDeepLinkUrlParams();
+            }}
+            onShareCompleted={handleShareCompleted}
+          />
+        </div>
       )}
 
       {/* MODAL 7: OFFLINE PLAYLISTS & BATCH DOWNLOAD QUEUE */}
-      <OfflinePlaylistModal
-        isOpen={showOfflineModal}
-        onClose={() => setShowOfflineModal(false)}
-        musicList={musicList}
-        currentTrack={currentTrack}
-        isPlaying={isPlaying}
-        onPlayToggle={handlePlayToggle}
-        onPlayPlaylist={handlePlayPlaylist}
-        onToast={addToast}
-        initialTab={offlineModalInitialTab}
-      />
+      {showOfflineModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <OfflinePlaylistModal
+            isOpen={showOfflineModal}
+            onClose={() => setShowOfflineModal(false)}
+            musicList={musicList}
+            currentTrack={currentTrack}
+            isPlaying={isPlaying}
+            onPlayToggle={handlePlayToggle}
+            onPlayPlaylist={handlePlayPlaylist}
+            onToast={addToast}
+            initialTab={offlineModalInitialTab}
+          />
+        </div>
+      )}
 
       {/* MODAL 8: VISUAL FONT STYLE SELECTOR */}
-      <FontSelectorModal
-        isOpen={showFontModal}
-        onClose={() => setShowFontModal(false)}
-        onSelectFont={handleSelectFont}
-        currentFontId={selectedFontId}
-      />
+      {showFontModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <FontSelectorModal
+            isOpen={showFontModal}
+            onClose={() => setShowFontModal(false)}
+            onSelectFont={handleSelectFont}
+            currentFontId={selectedFontId}
+          />
+        </div>
+      )}
 
     </div>
   );

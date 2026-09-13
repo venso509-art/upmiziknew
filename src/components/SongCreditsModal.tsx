@@ -22,7 +22,7 @@ export const SongCreditsModal: React.FC<SongCreditsModalProps> = ({
   const mainArtistPercent = Math.max(0, 100 - totalCollabPercent);
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 pt-6 bg-black/80 backdrop-blur-md animate-fadeIn">
       <div className="relative w-full max-w-lg bg-[#070b16] border border-white/[0.12] rounded-3xl overflow-hidden shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-white/[0.08] flex items-center justify-between bg-gradient-to-r from-[#0c1527] to-[#070b16]">

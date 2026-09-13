@@ -140,11 +140,11 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               ? 'text-yellow-400 bg-yellow-400/15 font-bold shadow-inner'
               : 'text-slate-400 hover:text-slate-200'
           }`}
-          title={pendingArtistsCount > 0 ? `${pendingArtistsCount} nouvo atis an atant validasyon` : 'Espas Administratè'}
+          title={currentAdmin && pendingArtistsCount > 0 ? `${pendingArtistsCount} nouvo atis an atant validasyon` : 'Espas Administratè'}
         >
           <div className="relative flex items-center justify-center">
             <ShieldCheck className={`w-5 h-5 ${currentAdmin ? 'text-yellow-400' : 'text-slate-400'}`} />
-            {pendingArtistsCount > 0 && (
+            {Boolean(currentAdmin) && pendingArtistsCount > 0 && (
               <span className="absolute -top-1.5 -right-2 px-1 min-w-[15px] h-3.5 rounded-full bg-red-500 text-white text-[9px] font-mono font-black flex items-center justify-center shadow-md shadow-red-500/50 animate-pulse">
                 {pendingArtistsCount}
               </span>

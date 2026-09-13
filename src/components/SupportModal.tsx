@@ -425,7 +425,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({
   return (
     <div
       ref={modalContainerRef}
-      className={`fixed inset-0 z-[80] overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-md p-2 sm:p-4 transition-all ${
+      className={`fixed inset-0 z-[200] overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-md p-2 sm:p-4 pt-4 sm:pt-6 transition-all ${
         isClosing ? 'animate-modal-backdrop-out' : 'animate-modal-backdrop-in'
       }`}
       onClick={(e) => {

@@ -43,6 +43,7 @@ interface HeaderProps {
   onOpenOfflineModal?: () => void;
   offlineTracksCount?: number;
   onOpenFontSelector?: () => void;
+  pendingArtistsCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -69,12 +70,15 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleTheme,
   onOpenOfflineModal,
   offlineTracksCount = 0,
-  onOpenFontSelector
+  onOpenFontSelector,
+  pendingArtistsCount: externalPendingCount
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Calculate count of pending artists waiting for validation
-  const pendingArtistsCount = (artists || []).filter((a) => a && a.status === 'pending').length;
+  // Calculate count of pending artists waiting for validation ONLY for logged-in super admin
+  const pendingArtistsCount = currentAdmin 
+    ? (externalPendingCount !== undefined ? externalPendingCount : (artists || []).filter((a) => a && a.status === 'pending').length)
+    : 0;
 
   const handleSearchSubmit = () => {
     setCurrentView('public');
@@ -89,8 +93,8 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header 
       id="main-app-header"
-      style={{ position: 'sticky', top: 0, zIndex: 100 }}
-      className={`sticky top-0 z-[100] w-full backdrop-blur-xl border-b transition-colors duration-200 shadow-sm ${
+      style={{ position: 'sticky', top: 0, zIndex: 40 }}
+      className={`sticky top-0 z-40 w-full backdrop-blur-xl border-b transition-colors duration-200 shadow-sm ${
         themeMode === 'light'
           ? 'bg-white/95 border-slate-200/90'
           : 'bg-[#05070a]/95 border-white/[0.08]'
@@ -341,17 +345,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={onOpenAdminAuth}
                 className="relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[#0d1424] hover:bg-[#131c33] text-slate-300 hover:text-white border border-white/[0.08] transition-all"
               >
-                <div className="relative flex items-center justify-center">
-                  <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
-                  {pendingArtistsCount > 0 && (
-                    <span
-                      className="absolute -top-2 -right-2 px-1 min-w-[14px] h-3 rounded-full bg-red-500 text-white text-[8px] font-mono font-black flex items-center justify-center shadow-sm shadow-red-500/40 animate-pulse"
-                      title={`${pendingArtistsCount} atis an atant`}
-                    >
-                      {pendingArtistsCount}
-                    </span>
-                  )}
-                </div>
+                <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
                 <span>Admin</span>
               </button>
             )}
@@ -399,7 +393,7 @@ export const Header: React.FC<HeaderProps> = ({
               aria-label="Meni konplè"
             >
               {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-              {pendingArtistsCount > 0 && (
+              {Boolean(currentAdmin) && pendingArtistsCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-[#05070a] animate-pulse" />
               )}
             </button>
@@ -573,20 +567,8 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={() => { onOpenAdminAuth(); setMobileMenuOpen(false); }}
                 className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white"
               >
-                <div className="relative flex items-center justify-center">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  {pendingArtistsCount > 0 && (
-                    <span className="absolute -top-1.5 -right-2 px-1 min-w-[14px] h-3.5 rounded-full bg-red-500 text-white text-[8px] font-mono font-black flex items-center justify-center shadow-sm shadow-red-500/50 animate-pulse">
-                      {pendingArtistsCount}
-                    </span>
-                  )}
-                </div>
+                <ShieldCheck className="w-3.5 h-3.5" />
                 <span>Koneksyon Administratè</span>
-                {pendingArtistsCount > 0 && (
-                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-red-500 text-white">
-                    {pendingArtistsCount} nouvo
-                  </span>
-                )}
               </button>
             )}
 
