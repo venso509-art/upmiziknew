@@ -48,7 +48,7 @@ RUN chmod +x /start.sh
 EXPOSE 80
 
 # Healthcheck pou Coolify ka verifye sèvis la imedyatman
-HEALTHCHECK --interval=20s --timeout=5s --start-period=5s --retries=3 \
-    CMD wget -qO- http://127.0.0.1/backend/api/health.php || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD wget -qO- http://127.0.0.1/ || exit 1
 
 CMD ["/start.sh"]
