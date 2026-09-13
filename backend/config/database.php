@@ -5,11 +5,32 @@
 
 require_once __DIR__ . '/env.php';
 
-define('DB_HOST', env('DB_HOST', 'localhost'));
-define('DB_PORT', env('DB_PORT', '3306'));
-define('DB_NAME', env('DB_NAME', ''));
-define('DB_USER', env('DB_USER', ''));
-define('DB_PASS', env('DB_PASS', ''));
+// Detekte ak sipòte tout fòm varyab anviwònman Coolify, Docker ak Hostinger
+$rawHost = env('DB_HOST') ?: env('MYSQL_HOST') ?: env('MYSQL_URL_HOST');
+$rawPort = env('DB_PORT') ?: env('MYSQL_PORT') ?: '3306';
+$rawName = env('DB_NAME') ?: env('MYSQL_DATABASE') ?: env('DB_DATABASE') ?: 'upmizik_db';
+$rawUser = env('DB_USER') ?: env('MYSQL_USER') ?: 'upmizik_user';
+$rawPass = env('DB_PASS') ?: env('MYSQL_PASSWORD') ?: env('DB_PASSWORD') ?: 'upmizik_secure_pass_2026';
+
+// Parse DATABASE_URL si Coolify bay yon URL konplè tankou: mysql://user:pass@host:port/dbname
+$dbUrl = env('DATABASE_URL') ?: env('MYSQL_URL');
+if ($dbUrl && ($parsed = parse_url($dbUrl))) {
+    if (!empty($parsed['host'])) $rawHost = $parsed['host'];
+    if (!empty($parsed['port'])) $rawPort = (string)$parsed['port'];
+    if (!empty($parsed['user'])) $rawUser = $parsed['user'];
+    if (!empty($parsed['pass'])) $rawPass = $parsed['pass'];
+    if (!empty($parsed['path'])) $rawName = ltrim($parsed['path'], '/');
+}
+
+if (!$rawHost) {
+    $rawHost = file_exists('/.dockerenv') ? 'db' : 'localhost';
+}
+
+define('DB_HOST', $rawHost);
+define('DB_PORT', $rawPort);
+define('DB_NAME', $rawName);
+define('DB_USER', $rawUser);
+define('DB_PASS', $rawPass);
 define('SITE_URL', rtrim(env('SITE_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . ($_SERVER['HTTP_HOST'] ?? 'localhost')), '/'));
 
 if (!function_exists('getDBConnection')) {

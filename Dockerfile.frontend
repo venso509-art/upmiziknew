@@ -1,0 +1,29 @@
+# ============================================================
+# Stage 1: Build Node.js / Vite Frontend
+# ============================================================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Enstale depandans yo
+COPY package*.json ./
+RUN npm install
+
+# Kopye kòd la epi bati dosye dist la
+COPY . .
+RUN npm run build
+
+# ============================================================
+# Stage 2: Sèvi ak Nginx Alpine + Proxy pou Backend API
+# ============================================================
+FROM nginx:alpine
+
+# Kopye konfigirasyon Nginx ak reverse proxy pou /backend/api
+COPY docker/nginx-frontend.conf /etc/nginx/nginx.conf
+
+# Kopye fichye dist yo
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

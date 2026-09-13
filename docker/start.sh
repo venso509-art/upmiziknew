@@ -32,7 +32,7 @@ if [ -d "/usr/local/etc/php-fpm.d" ]; then
 fi
 
 # Ekspòte varyab anviwònman Docker yo nan fichye .env pou PHP ka li yo dirèkteman
-printenv | grep -E '^(DB_|SITE_|APP_|COOLIFY_|PORT)' > /var/www/html/.env || true
+printenv | grep -E '^(DB_|MYSQL_|DATABASE_|SITE_|APP_|COOLIFY_|PORT)' > /var/www/html/.env || true
 chown www-data:www-data /var/www/html/.env || true
 chmod 644 /var/www/html/.env || true
 

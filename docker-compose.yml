@@ -1,30 +1,79 @@
 version: '3.8'
 
 services:
-  # 1. Aplikasyon UpMizik (Frontend + Backend PHP/Nginx)
-  app:
+  # =========================================================================
+  # 1. FRONTEND: Node.js / Vite (React SPA sèvi pa Nginx)
+  # =========================================================================
+  frontend:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.frontend
+    container_name: upmizik-frontend
     restart: always
+    expose:
+      - "80"
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - upmizik_network
+    # Labels pou Coolify / Traefik Proxy (si Coolify ap jere SSL & routing)
+    labels:
+      - "coolify.managed=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.upmizik-frontend.rule=Host(`upmizik.com`) || Host(`www.upmizik.com`)"
+      - "traefik.http.routers.upmizik-frontend.entrypoints=websecure"
+      - "traefik.http.routers.upmizik-frontend.tls=true"
+      - "traefik.http.routers.upmizik-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.upmizik-frontend.priority=1"
+      - "traefik.http.services.upmizik-frontend.loadbalancer.server.port=80"
+
+  # =========================================================================
+  # 2. BACKEND: PHP 8.2 Apache / FPM API & Uploads
+  # =========================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: upmizik-backend
+    restart: always
+    expose:
+      - "80"
     environment:
       - DB_HOST=db
+      - DB_PORT=3306
       - DB_NAME=upmizik_db
       - DB_USER=upmizik_user
       - DB_PASS=upmizik_secure_pass_2026
       - APP_ENV=production
+      - CORS_ALLOWED_ORIGIN=https://upmizik.com,https://www.upmizik.com
     volumes:
-      # Volim pèmanan pou fichye mizik ak foto pa janm pèdi lè gen mizajou
+      # Volim pèmanan pou mizik MP3, foto, kouvèti ak prèv MonCash/Natcash
       - uploads_data:/var/www/html/backend/uploads
     depends_on:
       - db
     networks:
       - upmizik_network
+    # Labels pou Traefik/Coolify route /backend/api ak /backend/uploads dirèkteman
+    labels:
+      - "coolify.managed=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.upmizik-backend.rule=(Host(`upmizik.com`) || Host(`www.upmizik.com`)) && (PathPrefix(`/backend/api`) || PathPrefix(`/backend/uploads`))"
+      - "traefik.http.routers.upmizik-backend.entrypoints=websecure"
+      - "traefik.http.routers.upmizik-backend.tls=true"
+      - "traefik.http.routers.upmizik-backend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.upmizik-backend.priority=10"
+      - "traefik.http.services.upmizik-backend.loadbalancer.server.port=80"
 
-  # 2. Baz Done MySQL
+  # =========================================================================
+  # 3. DATABASE: MySQL 8.0
+  # =========================================================================
   db:
     image: mysql:8.0
+    container_name: upmizik-db
     restart: always
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
       MYSQL_ROOT_PASSWORD: root_secure_pass_2026
       MYSQL_DATABASE: upmizik_db
@@ -32,15 +81,18 @@ services:
       MYSQL_PASSWORD: upmizik_secure_pass_2026
     volumes:
       - db_data:/var/lib/mysql
-      # Chaje schema inisyal la otomatikman
+      # Inisyalize tout tablo baz done yo otomatikman
       - ./backend/database/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - upmizik_network
 
 volumes:
   db_data:
+    name: upmizik_db_data
   uploads_data:
+    name: upmizik_uploads_data
 
 networks:
   upmizik_network:
+    name: upmizik_network
     driver: bridge

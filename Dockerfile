@@ -20,8 +20,9 @@ WORKDIR /var/www/html
 # Kopye Nginx configuration
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 
-# Kopye kòd backend PHP a
+# Kopye kòd backend PHP a ak fichye rasin PHP yo
 COPY backend /var/www/html/backend
+COPY *.php /var/www/html/
 
 # Kopye Frontend ki bati soti nan etap 1
 COPY --from=frontend-builder /app/dist /var/www/html/dist
@@ -33,6 +34,7 @@ RUN mkdir -p /var/www/html/backend/uploads/music \
              /var/www/html/backend/uploads/avatars \
              /var/www/html/backend/uploads/banners \
              /var/www/html/backend/uploads/media \
+             /var/www/html/backend/uploads/tracks \
              /var/www/html/backend/uploads/general \
              /var/www/html/backend/logs \
              /var/www/html/backend/backups \
@@ -44,5 +46,9 @@ COPY docker/start.sh /start.sh
 RUN chmod +x /start.sh
 
 EXPOSE 80
+
+# Healthcheck pou Coolify ka verifye sèvis la imedyatman
+HEALTHCHECK --interval=20s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget -qO- http://127.0.0.1/backend/api/health.php || exit 1
 
 CMD ["/start.sh"]

@@ -1,0 +1,107 @@
+# =============================================================================
+# Coolify Application & Stack Specification (coolify.yaml)
+# Project: UpMizik (https://upmizik.com)
+# =============================================================================
+version: '1'
+
+stack:
+  name: upmizik-stack
+  description: "UpMizik - Platfòm Mizik Ayisyen (React/Vite + PHP/MySQL)"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Frontend: React / Vite SPA
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: upmizik-frontend
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80"
+    domains:
+      - "upmizik.com"
+      - "www.upmizik.com"
+    healthcheck:
+      path: "/"
+      port: 80
+      interval: 20
+      timeout: 5
+      retries: 3
+    restart: always
+
+  # ---------------------------------------------------------------------------
+  # Backend: PHP 8.2 API & File Uploads
+  # ---------------------------------------------------------------------------
+  backend:
+    name: upmizik-backend
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "80"
+    environment:
+      DB_HOST: "db"
+      DB_PORT: 3306
+      DB_NAME: "upmizik_db"
+      DB_USER: "upmizik_user"
+      DB_PASS: "upmizik_secure_pass_2026"
+      APP_ENV: "production"
+    volumes:
+      - "uploads_data:/var/www/html/backend/uploads"
+    healthcheck:
+      path: "/backend/api/health.php"
+      port: 80
+      interval: 20
+      timeout: 5
+      retries: 3
+    restart: always
+
+  # ---------------------------------------------------------------------------
+  # Database: MySQL 8.0
+  # ---------------------------------------------------------------------------
+  db:
+    name: upmizik-db
+    image: "mysql:8.0"
+    environment:
+      MYSQL_ROOT_PASSWORD: "root_secure_pass_2026"
+      MYSQL_DATABASE: "upmizik_db"
+      MYSQL_USER: "upmizik_user"
+      MYSQL_PASSWORD: "upmizik_secure_pass_2026"
+    volumes:
+      - "db_data:/var/lib/mysql"
+      - "./backend/database/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro"
+    restart: always
+
+# -----------------------------------------------------------------------------
+# Coolify Proxy Configuration (Traefik / Caddy / Nginx)
+# -----------------------------------------------------------------------------
+# Sa a eksplike Coolify kijan pou l divize trafik la sou menm domèn nan:
+# 1. Tout sa ki kòmanse ak /backend/api oswa /backend/uploads voye l nan backend:80
+# 2. Tout lòt bagay voye l nan frontend:80
+proxy:
+  caddy:
+    custom_config: |
+      upmizik.com, www.upmizik.com {
+          # Proxy demann API PHP ak fichye uploads nan container backend la
+          handle_path /backend/api/* {
+              reverse_proxy backend:80
+          }
+          handle_path /backend/uploads/* {
+              reverse_proxy backend:80
+          }
+          # Tout lòt wout SPA yo ale nan container frontend la
+          handle {
+              reverse_proxy frontend:80
+          }
+      }
+  traefik:
+    rules:
+      - name: "backend-api-routing"
+        service: "backend"
+        rule: "(Host(`upmizik.com`) || Host(`www.upmizik.com`)) && (PathPrefix(`/backend/api`) || PathPrefix(`/backend/uploads`))"
+        priority: 10
+      - name: "frontend-spa-routing"
+        service: "frontend"
+        rule: "Host(`upmizik.com`) || Host(`www.upmizik.com`)"
+        priority: 1

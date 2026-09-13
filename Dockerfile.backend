@@ -1,11 +1,48 @@
-FROM php:8.1-apache
+FROM php:8.2-apache
 
-RUN docker-php-ext-install mysqli pdo pdo_mysql
+# Enstale ekstansyon PHP nesesè pou UpMizik
+RUN apt-get update && apt-get install -y \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    libzip-dev \
+    zip \
+    unzip \
+    default-mysql-client \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) gd pdo pdo_mysql mysqli zip \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Aktive Apache modil yo
 RUN a2enmod rewrite headers
 
-COPY backend/ /var/www/html/backend/
+# Konfigire Apache DocumentRoot ak AllowOverride
+RUN sed -ri -e 's!/var/www/html!/var/www/html!g' /etc/apache2/sites-available/*.conf \
+    && sed -ri -e 's!AllowOverride None!AllowOverride All!g' /etc/apache2/apache2.conf /etc/apache2/sites-available/*.conf
 
-RUN chown -R www-data:www-data /var/www/html/backend
+# Konfigirasyon PHP pou gwo fichye mizik MP3
+RUN echo "upload_max_filesize = 100M\npost_max_size = 100M\nmemory_limit = 256M\nmax_execution_time = 300\n" > /usr/local/etc/php/conf.d/uploads.ini
+
+WORKDIR /var/www/html
+
+# Kopye kòd backend PHP a ak fichye rasin yo
+COPY backend/ /var/www/html/backend/
+COPY *.php /var/www/html/
+
+# Kreye dosye uploads ak logs epi bay pèmisyon
+RUN mkdir -p /var/www/html/backend/uploads/music \
+             /var/www/html/backend/uploads/covers \
+             /var/www/html/backend/uploads/proofs \
+             /var/www/html/backend/uploads/avatars \
+             /var/www/html/backend/uploads/banners \
+             /var/www/html/backend/uploads/media \
+             /var/www/html/backend/uploads/tracks \
+             /var/www/html/backend/uploads/general \
+             /var/www/html/backend/logs \
+             /var/www/html/backend/backups \
+    && chown -R www-data:www-data /var/www/html \
+    && chmod -R 775 /var/www/html/backend/uploads /var/www/html/backend/logs
 
 EXPOSE 80
+
+CMD ["apache2-foreground"]

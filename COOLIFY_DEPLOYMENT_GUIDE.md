@@ -116,6 +116,53 @@ Nan Docker, pou mizik MP3, foto kouvèti ak logo atis yo pa janm disparèt lè g
 
 ---
 
+## ETAP 6: Kijan Coolify Proxy wout `/backend/api` nan Backend Container la (Caddy / Traefik / Nginx)
+
+Lè w genyen 2 container separe (Frontend Vite ak Backend PHP), yo toulede dwe parèt sou menm domèn `https://upmizik.com` pou evite pwoblèm CORS ak bon jesyon fichye.
+
+Gen 3 fason fasil pou Coolify jere sa:
+
+### Metòd 1: Otomatik atravè Labels Traefik nan `docker-compose.yml` (Pi Rekòmande nan Coolify v4)
+Nan `docker-compose.yml`, nou mete priyorite pi wo sou backend la pou nenpòt URL ki gen `/backend/api` oswa `/backend/uploads`:
+- **Frontend Router** (Priyorite = 1): Tout trafik jeneral sou `upmizik.com` ale sou `frontend:80`.
+- **Backend Router** (Priyorite = 10): Tout demann k ap chèche `/backend/api/*` oswa `/backend/uploads/*` ale dirèkteman sou `backend:80`.
+Lè sa a, ou pa bezwen modifye anyen nan Coolify UI, Traefik li labels yo otomatikman!
+
+### Metòd 2: Konfigirasyon Caddy nan Coolify Proxy (Si w itilize Caddy kòm Proxy)
+Si sèvè Coolify w la ap itilize Caddy kòm Reverse Proxy, ale nan **Coolify Dashboard** -> **Proxy Settings** (oswa nan anviwònman aplikasyon an -> **Custom Caddy Configuration**), epi kole blòk sa a:
+
+```caddy
+upmizik.com, www.upmizik.com {
+    # 1. Voye tout apèl API PHP yo nan container backend la
+    handle_path /backend/api/* {
+        reverse_proxy upmizik-backend:80
+    }
+
+    # 2. Voye tout aksè nan fichye odyo ak foto uploads yo nan backend la
+    handle_path /backend/uploads/* {
+        reverse_proxy upmizik-backend:80
+    }
+
+    # 3. Tout lòt trafik SPA (React / Vite) ale nan container frontend la
+    handle {
+        reverse_proxy upmizik-frontend:80
+    }
+}
+```
+
+### Metòd 3: Nginx Proxy entèn (Nan `Dockerfile.frontend`)
+Si w prefere ke se Nginx ki nan frontend container la k ap voye requèt yo bay backend container la sou rezo entèn Docker a (`upmizik_network`), fichye `docker/nginx-frontend.conf` nou kreye a deja genyen direktiv:
+```nginx
+location /backend/api/ {
+    proxy_pass http://backend:80/backend/api/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
+Sa vle di menm si Coolify voye 100% trafik sou `frontend:80`, Nginx frontend la pral voye tout demann `/backend/api/` nan backend PHP a san okenn erè.
+
+---
+
 ## Poukisa Coolify pi bon pase aaPanel pou UpMizik ?
 1. **0 Erè Pèmisyon**: Tout bagay kouri andedan bwat Docker la sou itilizatè `www-data`, pa gen `.user.ini` ki bloke, pa gen batay ak `chown`.
 2. **Auto-Deploy**: Depi w pouse yon mizajou sou GitHub, Coolify re-konstwi sit la otomatikman.
