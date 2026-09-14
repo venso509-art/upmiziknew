@@ -1,49 +1,50 @@
-# UpMizik - Gid Deplwaman sou Hostinger VPS (Ubuntu 22.04 + aaPanel)
+# UpMizik - Gid Deplwaman sou VPS Hostinger avèk Coolify & Docker
 
-Gid sa a eksplike etap pa etap kijan pou konfigire ak mete UpMizik an liy sou VPS Hostinger ou an avèk panèl **aaPanel**.
-
----
-
-## 1. Achitekti Pwojè a
-
-- **Frontend (Kliyan)**: React 19 + TypeScript + Vite + Tailwind CSS (Bati nan dosye `dist/`)
-- **Backend (API)**: PHP 8.1+ avèk PDO MySQL (Sitiye nan dosye `backend/api/`)
-- **Baz Done**: MySQL 8.0+ (Schema nan `backend/database/schema.sql`)
-- **Fichye Upload**: `backend/uploads/` (Mizik MP3, Kouvèti, Prèv transfè)
-- **Sekirite**: Middleware CORS, Sessions HttpOnly, CSRF Token, Rate Limiting, `.htaccess` pwoteksyon.
+Gid sa a eksplike kijan pou mete ak jere UpMizik an liy sou VPS Hostinger ou an avèk **Coolify** (ki baze sou Docker, Docker Compose, ak MySQL 8.0).
 
 ---
 
-## 2. Etap Konfigirasyon Baz Done sou aaPanel
+## 1. Achitekti Sèvè & Pwodiksyon
 
-1. Konekte sou **aaPanel** (`https://ip_vps_ou:8888`).
-2. Ale nan **Databases** > **Add Database**:
-   - **DBName**: `u123456789_upmizik` (oswa non ou chwazi a)
-   - **DBUser**: `u123456789_upmizik_user`
-   - **Password**: Jenere yon modpas solid (egz: `VotreMotDePasseSekirize509@`)
-   - **Charset**: `utf8mb4`
-3. Klike sou **phpMyAdmin** bò kote baz done a oswa louvri terminal VPS la:
-   ```bash
-   mysql -u u123456789_upmizik_user -p u123456789_upmizik < /www/wwwroot/upmizik.com/backend/database/schema.sql
-   ```
+- **VPS**: Hostinger KVM 2 (VPS ID: 1927985, IP: `2.25.132.44`)
+- **Sistèm**: Ubuntu 22.04 LTS
+- **Panèl Jesyon**: **Coolify**
+- **Metòd Deplwaman**: Docker Compose / Dockerfile
+- **Domèn Prensipal**: `https://upmizik.com` ak `https://www.upmizik.com`
+- **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS (Bati nan imaj Docker, distribye sou Nginx)
+- **Backend**: PHP 8.2 FPM / API PDO MySQL (`/backend/api/`)
+- **Baz Done**: MySQL 8.0 sou Coolify (Schéma: `backend/database/schema.sql`)
+- **Fichye Upload**: Volim pèmanan Docker `uploads_data` (`/var/www/html/backend/uploads/`) pou mizik MP3, kouvèti, ak foto pa janm pèdi.
 
 ---
 
-## 3. Konfigirasyon Fichye `.env`
+## 2. Deplwaman Otomatik via Coolify & GitHub
 
-Nan rasin sit la (`/www/wwwroot/upmizik.com/.env`), kreye fichye `.env` an:
+1. Nan **Coolify Dashboard** (`http://2.25.132.44:8000` oswa domèn Coolify ou):
+   - Chwazi **Projects** > **UpMizik**.
+   - Ajoute yon nouvo resous tip **Application** oswa **Docker Compose**.
+   - Konekte dirèkteman ak repozitwa GitHub: `https://github.com/venso509-art/upmiziknew.git`.
+   - Branch: `main`.
+2. **Build Pack**: Chwazi **Docker Compose** (itilize `docker-compose.yml`) oswa **Dockerfile** (itilize `Dockerfile`).
+3. **Automated Deployments**: Aktive **Webhook / Auto-deploy on Push** pou chak commit sou GitHub deplwaye otomatikman.
+
+---
+
+## 3. Varyab Anviwònman sou Coolify (.env)
+
+Konfigire varyab sa yo dirèkteman nan panèl **Environment Variables** sou Coolify:
 
 ```env
 # Frontend
 VITE_API_BASE_URL=/backend/api
 VITE_PHP_API_URL=/backend/api
 
-# Baz Done MySQL
-DB_HOST=localhost
+# Baz Done MySQL (sèvis Docker 'db' oswa baz Coolify dedye)
+DB_HOST=db
 DB_PORT=3306
-DB_NAME=non_baz_done_ou_a
-DB_USER=non_itilizate_baz_done_ou_a
-DB_PASS=Mete_Yon_Modpas_Solid_Isit_La
+DB_NAME=upmizik_db
+DB_USER=upmizik_user
+DB_PASS=upmizik_secure_pass_2026
 
 # Anviwònman & Domèn
 APP_ENV=production
@@ -52,119 +53,37 @@ ALLOWED_ORIGINS=https://upmizik.com,https://www.upmizik.com
 
 # Administratè Master
 ADMIN_EMAIL=admin@upmizik.com
-ADMIN_SECRET=Mete_Yon_Sekre_Admin_Solid_Isit_La
+ADMIN_SECRET=UpMizikAdmin2026SecureKey!
 
-# MonCash Gateway (Opsyonèl pou kòmanse)
+# MonCash & Natcash
 MONCASH_CLIENT_ID=
 MONCASH_CLIENT_SECRET=
 MONCASH_ENVIRONMENT=sandbox
-MONCASH_RETURN_URL=https://upmizik.com/backend/api/donations.php?action=return
-MONCASH_CANCEL_URL=https://upmizik.com/backend/api/donations.php?action=cancel
 ```
 
 ---
 
-## 4. Konfigirasyon Nginx sou aaPanel
+## 4. Volim Pèmanan pou Fichye Mizik (MP3 & Imaj)
 
-Nan aaPanel > **Websites** > Klike sou sit ou an > **URL rewrite** oswa **Configuration File**:
-
-```nginx
-server {
-    listen 80;
-    listen 443 ssl http2;
-    server_name upmizik.com www.upmizik.com;
-    root /www/wwwroot/upmizik.com;
-    index index.html index.php;
-
-    # Limit Upload pou mizik MP3
-    client_max_body_size 128M;
-
-    # 1. API PHP Routes
-    location /backend/api/ {
-        try_files $uri $uri/ /backend/api/index.php?$query_string;
-    }
-
-    # 2. Ekzekisyon Script PHP
-    location ~ \.php$ {
-        include enable-php-81.conf; # oswa enable-php-82.conf
-        fastcgi_pass unix:/tmp/php-cgi-81.sock;
-        fastcgi_index index.php;
-        include fastcgi.conf;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-    }
-
-    # 3. Sekirite Dosye Uploads (Pa kite PHP kouri nan uploads)
-    location /backend/uploads/ {
-        location ~ \.(php|phtml|php3|php4|php5|php7|phps|cgi|pl|py|sh)$ {
-            deny all;
-        }
-    }
-
-    # 4. Bloke aksè sou dosye sekrè
-    location ~ /\.(env|git|htaccess) {
-        deny all;
-    }
-    location /backend/backups/ {
-        deny all;
-    }
-    location /backend/logs/ {
-        deny all;
-    }
-
-    # 5. Single Page Application (React Router fallback)
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
+Pou asire mizik ak imaj atis yo rete an sekirite menm lè Docker rekòmanse:
+- Volim `uploads_data` monte sou `/var/www/html/backend/uploads`
+- Volim `db_data` monte sou `/var/lib/mysql` pou done baz done a
 
 ---
 
-## 5. Pèmisyon Dosye sou Ubuntu
+## 5. Inisyalizasyon Tablo MySQL
 
-Egzekite kòmand sa yo nan terminal VPS la pou bay bon pèmisyon pou Apache/Nginx (`www` oswa `www-data`):
+Lè sèvis la monte pou premye fwa, `docker-compose.yml` egzekite `backend/database/schema.sql` otomatikman nan `/docker-entrypoint-initdb.d/init.sql`.
 
+Si ou bezwen egzekite l manyèlman nan terminal VPS la:
 ```bash
-cd /www/wwwroot/upmizik.com
-chown -R www:www .
-chmod -R 755 backend/uploads
-chmod -R 750 backend/backups
-chmod -R 750 backend/logs
-chmod 600 .env
+docker exec -i upmizik-db mysql -u upmizik_user -p upmizik_db < backend/database/schema.sql
 ```
 
 ---
 
-## 6. Bati Frontend la (Build Vite)
+## 6. Verifikasyon Sèvis la
 
-Pou mete tout dènye chanjman React yo an liy:
-
-```bash
-cd /www/wwwroot/upmizik.com
-npm install
-npm run build
-cp -r dist/* .
-```
-
----
-
-## 7. Backup Otomatik (Cron Job sou aaPanel)
-
-Ale nan **aaPanel** > **Cron** > **Add Task**:
-- **Type**: Shell Script
-- **Name**: UpMizik Daily Database Backup
-- **Period**: Chak jou a 2:00 AM
-- **Script**:
-  ```bash
-  /bin/bash /www/wwwroot/upmizik.com/backend/scripts/backup.sh
-  ```
-
----
-
-## 8. Verifikasyon Final
-
-1. Louvri `https://upmizik.com` nan navigatè a.
-2. Ale sou paj login admin: `https://upmizik.com/#/admin` (oswa bouton administratè).
-3. Konekte ak:
-   - **Email / Username**: `admin` oswa `admin@upmizik.com`
-   - **Modpas**: `AdminUpMizik2026Secure!`
+1. Vizite `https://upmizik.com`
+2. Teste API Health Check: `https://upmizik.com/backend/api/health.php`
+3. Teste koneksyon admin nan aplikasyon an avèk kont administratè ou.

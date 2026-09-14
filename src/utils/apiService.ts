@@ -8,11 +8,11 @@
 import { ArtistUser, MusicItem, DonationItem, ArtistInboxMessage, SocialPost, PubItem, RpaItem } from '../types';
 
 // API Base URL:
-// Lè w sou Hostinger, li ka itilize chemen relatif '/backend/api' oswa URL domèn ou an
+// Backend PHP a ap kouri sou subdomain https://api.upmizik.com
 const API_BASE_URL = ((import.meta as unknown as { env?: Record<string, string> }).env?.VITE_PHP_API_URL as string) || 
-  (typeof window !== 'undefined' && window.location.origin.includes('localhost')
-    ? '/backend/api'
-    : '/backend/api');
+  (typeof window !== 'undefined' && window.location.hostname.includes('upmizik.com')
+    ? 'https://api.upmizik.com/backend/api'
+    : 'https://api.upmizik.com/backend/api');
 
 class ApiService {
   private baseUrl: string = API_BASE_URL;

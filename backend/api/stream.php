@@ -3,7 +3,7 @@
  * UpMizik - Real-Time Server-Sent Events (SSE) Stream Endpoint
  * 
  * Pèmèt kliyan konekte yo resevwa nouvo mizik, pòs sosyal, ak mizajou an tan reyèl.
- * Konpatib 100% ak Nginx sou Ubuntu 22.04 / aaPanel (X-Accel-Buffering: no).
+ * Konpatib 100% ak Nginx sou Ubuntu 22.04 / Coolify Docker (X-Accel-Buffering: no).
  */
 
 require_once dirname(__DIR__) . '/middleware/cors.php';
@@ -23,20 +23,38 @@ ob_implicit_flush(1);
 header('Content-Type: text/event-stream; charset=utf-8');
 header('Cache-Control: no-cache, no-transform');
 header('Connection: keep-alive');
-header('X-Accel-Buffering: no'); // Nginx buffering bypass sou aaPanel / Ubuntu
+header('X-Accel-Buffering: no'); // Nginx buffering bypass pou Coolify / Docker / Ubuntu
 
 // Koneksyon MySQL
 $pdo = getDBConnection();
 
-// Rekipere dènye eta mizik aktyèl la nan musiques
+// Rekipere dènye eta mizik, atis, ak donasyon nan MySQL
 $lastMusicCount = 0;
 $lastMaxMusicId = '';
+$lastArtistCount = 0;
+$lastArtistMaxId = '';
+$lastArtistStatusHash = '';
+$lastDonationCount = 0;
+$lastDonationMaxId = '';
+$lastDonationStatusHash = '';
 
 try {
     $stmt = $pdo->query("SELECT COUNT(*) as cnt, MAX(id) as max_id FROM musiques WHERE statut = 'actif'");
     $row = $stmt->fetch();
     $lastMusicCount = (int)($row['cnt'] ?? 0);
     $lastMaxMusicId = (string)($row['max_id'] ?? '');
+
+    $stmtA = $pdo->query("SELECT COUNT(*) as cnt, MAX(id) as max_id, COALESCE(GROUP_CONCAT(CONCAT(id, ':', statut) SEPARATOR ','), '') as shash FROM artistes");
+    $rowA = $stmtA->fetch();
+    $lastArtistCount = (int)($rowA['cnt'] ?? 0);
+    $lastArtistMaxId = (string)($rowA['max_id'] ?? '');
+    $lastArtistStatusHash = (string)($rowA['shash'] ?? '');
+
+    $stmtD = $pdo->query("SELECT COUNT(*) as cnt, MAX(id) as max_id, COALESCE(GROUP_CONCAT(CONCAT(id, ':', statut) SEPARATOR ','), '') as shash FROM dons");
+    $rowD = $stmtD->fetch();
+    $lastDonationCount = (int)($rowD['cnt'] ?? 0);
+    $lastDonationMaxId = (string)($rowD['max_id'] ?? '');
+    $lastDonationStatusHash = (string)($rowD['shash'] ?? '');
 } catch (Exception $e) {
     // Si tab la vid oswa erè
 }
@@ -45,6 +63,8 @@ echo "event: connected\n";
 echo "data: " . json_encode([
     'type' => 'connected',
     'musicCount' => $lastMusicCount,
+    'artistCount' => $lastArtistCount,
+    'donationCount' => $lastDonationCount,
     'serverTime' => time()
 ]) . "\n\n";
 @flush();
@@ -58,7 +78,7 @@ while ((time() - $startTime) < $maxDuration) {
     }
 
     try {
-        // Tcheke si gen nouvo mizik ki ajoute oswa modifye
+        // 1. Tcheke si gen nouvo mizik ki ajoute oswa modifye
         $stmt = $pdo->query("SELECT COUNT(*) as cnt, MAX(id) as max_id FROM musiques WHERE statut = 'actif'");
         $row = $stmt->fetch();
         $currCount = (int)($row['cnt'] ?? 0);
@@ -102,6 +122,48 @@ while ((time() - $startTime) < $maxDuration) {
                 'type' => 'music_update',
                 'count' => $currCount,
                 'latest' => $latest,
+                'timestamp' => time()
+            ]) . "\n\n";
+            @flush();
+        }
+
+        // 2. Tcheke si gen nouvo atis ki enskri oswa si estati yon atis chanje (pending, active, rejected)
+        $stmtA = $pdo->query("SELECT COUNT(*) as cnt, MAX(id) as max_id, COALESCE(GROUP_CONCAT(CONCAT(id, ':', statut) SEPARATOR ','), '') as shash FROM artistes");
+        $rowA = $stmtA->fetch();
+        $currArtCount = (int)($rowA['cnt'] ?? 0);
+        $currArtMaxId = (string)($rowA['max_id'] ?? '');
+        $currArtStatusHash = (string)($rowA['shash'] ?? '');
+
+        if ($currArtCount !== $lastArtistCount || $currArtMaxId !== $lastArtistMaxId || $currArtStatusHash !== $lastArtistStatusHash) {
+            $lastArtistCount = $currArtCount;
+            $lastArtistMaxId = $currArtMaxId;
+            $lastArtistStatusHash = $currArtStatusHash;
+
+            echo "event: artists_update\n";
+            echo "data: " . json_encode([
+                'type' => 'artists_update',
+                'count' => $currArtCount,
+                'timestamp' => time()
+            ]) . "\n\n";
+            @flush();
+        }
+
+        // 3. Tcheke si gen nouvo donasyon ki fèt oswa valide/rejte
+        $stmtD = $pdo->query("SELECT COUNT(*) as cnt, MAX(id) as max_id, COALESCE(GROUP_CONCAT(CONCAT(id, ':', statut) SEPARATOR ','), '') as shash FROM dons");
+        $rowD = $stmtD->fetch();
+        $currDonCount = (int)($rowD['cnt'] ?? 0);
+        $currDonMaxId = (string)($rowD['max_id'] ?? '');
+        $currDonStatusHash = (string)($rowD['shash'] ?? '');
+
+        if ($currDonCount !== $lastDonationCount || $currDonMaxId !== $lastDonationMaxId || $currDonStatusHash !== $lastDonationStatusHash) {
+            $lastDonationCount = $currDonCount;
+            $lastDonationMaxId = $currDonMaxId;
+            $lastDonationStatusHash = $currDonStatusHash;
+
+            echo "event: donations_update\n";
+            echo "data: " . json_encode([
+                'type' => 'donations_update',
+                'count' => $currDonCount,
                 'timestamp' => time()
             ]) . "\n\n";
             @flush();

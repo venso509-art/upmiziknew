@@ -125,6 +125,11 @@ if ($method === 'GET') {
 
     foreach ($donations as &$dn) {
         $dn['status'] = mapStatusToFrontend($dn['status'] ?? 'en_attente');
+        $dn['amount'] = (float)($dn['amount'] ?? 0);
+        $dn['artistShare'] = (float)($dn['artistShare'] ?? 0);
+        $dn['platformShare'] = (float)($dn['platformShare'] ?? 0);
+        $dn['createdAt'] = $dn['created_at'] ?? date('Y-m-d H:i:s');
+        $dn['date'] = $dn['createdAt'];
     }
 
     jsonResponse([

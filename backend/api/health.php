@@ -25,6 +25,21 @@ try {
     $rawUser = env('DB_USER') ?: env('MYSQL_USER') ?: 'upmizik_user';
     $rawPass = env('DB_PASS') ?: env('MYSQL_PASSWORD') ?: env('DB_PASSWORD') ?: '';
 
+    $dbUrl = env('DATABASE_URL') ?: env('MYSQL_URL');
+    if ($dbUrl && ($parsed = parse_url($dbUrl))) {
+        if (!empty($parsed['host'])) $rawHost = $parsed['host'];
+        if (!empty($parsed['port'])) $rawPort = (string)$parsed['port'];
+        if (!empty($parsed['user'])) $rawUser = $parsed['user'];
+        if (!empty($parsed['pass'])) $rawPass = $parsed['pass'];
+        if (!empty($parsed['path'])) $rawName = ltrim($parsed['path'], '/');
+    }
+
+    $response['db_debug'] = [
+        'target_host' => $rawHost,
+        'target_port' => $rawPort,
+        'target_user' => $rawUser,
+        'target_db' => $rawName
+    ];
     $dsn = "mysql:host={$rawHost};port={$rawPort};dbname={$rawName};charset=utf8mb4";
     $testPdo = new PDO($dsn, $rawUser, $rawPass, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,

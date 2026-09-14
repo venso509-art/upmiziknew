@@ -297,6 +297,44 @@ export default function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  // Health check sou backend PHP & baz done MySQL lè aplikasyon an chaje
+  useEffect(() => {
+    const checkBackendHealth = async () => {
+      // Detekte URL API ki apwopriye a:
+      // Sou prod Coolify / VPS: '/backend/api/health.php' (oswa 'https://api.upmizik.com/backend/api/health.php')
+      // Nan preview AI Studio / dev san PHP runtime: tcheke si sèvè a voye bon JSON
+      const isLocalOrPreview = typeof window !== 'undefined' && 
+        (window.location.hostname.includes('run.app') || window.location.hostname === 'localhost');
+      
+      const healthUrl = isLocalOrPreview && !window.location.hostname.includes('upmizik')
+        ? 'https://api.upmizik.com/backend/api/health.php'
+        : '/backend/api/health.php';
+
+      try {
+        const response = await fetch(healthUrl, {
+          headers: { 'Accept': 'application/json' },
+          cache: 'no-store'
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        const rawText = await response.text();
+
+        // Verifye si repons lan se bon JSON epi li pa kòd PHP an tèks brit
+        if (contentType.includes('application/json') || (rawText.trim().startsWith('{') && rawText.trim().endsWith('}'))) {
+          const data = JSON.parse(rawText);
+          console.log('🔍 [UpMizik Backend HealthCheck]:', data);
+        } else {
+          // Si sèvè lokal la retounen fichye .php a an tèks san egzekite l (Vite dev server)
+          console.info('ℹ️ [UpMizik Backend HealthCheck]: Anviwònman lokal/preview pa gen PHP runtime entegre. Backend la deplwaye sou https://api.upmizik.com');
+        }
+      } catch (error) {
+        console.warn('⚠️ [UpMizik Backend HealthCheck]: Pa rive kontakte backend PHP dirèkteman:', error instanceof Error ? error.message : error);
+      }
+    };
+
+    checkBackendHealth();
+  }, []);
+
   // Initial Load from Storage & Firestore Cloud Sync
   useEffect(() => {
     // Record and increment live platform visit counter (unlimited scaling)
