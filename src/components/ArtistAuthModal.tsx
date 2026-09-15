@@ -67,6 +67,7 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
   const exchangeRate = paymentConfig.htgExchangeRate ?? 145.0;
   const regFeeHtg = Math.round(regFeeUsd * exchangeRate * 100) / 100;
   const activeMethods = paymentConfig.methods.filter((m) => m.isActive);
+  const activePaymentMethods = activeMethods;
 
   const handleCopyNumber = (num: string, id: string) => {
     navigator.clipboard.writeText(num);
@@ -368,6 +369,8 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
       youtubeUrl: youtubeUrl.trim() || undefined,
       status: 'pending',
       registrationDate: new Date().toISOString().split('T')[0],
+      registrationFeeUsd: regFeeUsd,
+      registrationFeeHtg: regFeeHtg,
       totalListens: 0,
       totalDonationsReceived: 0
     };
@@ -384,7 +387,7 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
   const handleProofSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!proofPreview) {
-      setErrorMsg('Tanpri telechaje foto prèv $4.99 la.');
+      setErrorMsg(`Tanpri telechaje foto prèv $${regFeeUsd.toFixed(2)} la.`);
       return;
     }
 
@@ -409,7 +412,7 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
   const handleResubmitProof = (e: React.FormEvent) => {
     e.preventDefault();
     if (!proofPreview) {
-      setErrorMsg('Tanpri telechaje yon nouvo foto prèv $4.99 ki klè.');
+      setErrorMsg(`Tanpri telechaje yon nouvo foto prèv $${regFeeUsd.toFixed(2)} ki klè.`);
       return;
     }
 
@@ -1158,7 +1161,7 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
                 required
                 onChange={handleProofChange}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                title="Chwazi foto transfè $4.99 la"
+                title={`Chwazi foto transfè $${regFeeUsd.toFixed(2)} la`}
               />
               {isProcessingProof ? (
                 <div className="py-3 flex flex-col items-center justify-center gap-2">
@@ -1168,11 +1171,11 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
               ) : proofPreview ? (
                 <div className="flex items-center justify-center gap-3 relative z-20">
                   <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border-2 border-emerald-500 bg-black/60 shadow-lg shrink-0">
-                    <img src={proofPreview} alt="Prèv $4.99" className="w-full h-full object-cover" />
+                    <img src={proofPreview} alt={`Prèv $${regFeeUsd.toFixed(2)}`} className="w-full h-full object-cover" />
                   </div>
                   <div className="text-left text-xs">
                     <p className="text-emerald-400 font-bold flex items-center gap-1.5">
-                      <CheckCircle className="w-4 h-4 shrink-0" /> Foto prèv transfè $4.99 chaje
+                      <CheckCircle className="w-4 h-4 shrink-0" /> Foto prèv transfè ${regFeeUsd.toFixed(2)} chaje
                     </p>
                     <p className="text-slate-300 text-[11px] mt-0.5">Admin an pral verifye l pou aktive kont ou.</p>
                     <p className="text-slate-500 text-[10px] mt-1">Klike pou chanje foto a si w vle</p>
@@ -1181,8 +1184,8 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
               ) : (
                 <div className="flex flex-col items-center">
                   <Upload className="w-8 h-8 text-emerald-400 mb-1.5 animate-bounce" />
-                  <span className="text-xs text-slate-200 font-bold">Telechaje foto screenshot transfè $4.99 la</span>
-                  <span className="text-[10px] text-slate-400 mt-0.5">PNG, JPG, JPEG (Moncash / Natcash)</span>
+                  <span className="text-xs text-slate-200 font-bold">Telechaje foto screenshot transfè ${regFeeUsd.toFixed(2)} USD la</span>
+                  <span className="text-[10px] text-slate-400 mt-0.5">PNG, JPG, JPEG ({activePaymentMethods.map(m => m.name).join(' / ') || 'Moncash / Natcash'})</span>
                 </div>
               )}
             </div>
@@ -1238,7 +1241,7 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
                 Enskripsyon w lan Voye avèk Siksè!
               </h3>
               <p className="text-xs text-slate-300 mt-1">
-                Mèsi <strong className="text-yellow-300">{tempArtist.stageName}</strong>! Nou byen resevwa pwofil ou ak prèv transfè <strong>$4.99 USD (723.55 HTG)</strong> la.
+                Mèsi <strong className="text-yellow-300">{tempArtist.stageName}</strong>! Nou byen resevwa pwofil ou ak prèv transfè <strong>${regFeeUsd.toFixed(2)} USD ({regFeeHtg.toLocaleString()} HTG)</strong> la.
               </p>
             </div>
 
@@ -1249,7 +1252,7 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
                 <span>ESTATI: AN ATANT VALIDASYON PA ADMIN</span>
               </div>
               <p className="text-[11px] text-slate-300 leading-relaxed">
-                Pou asire sekirite platfòm nan ak tout atis yo, Administratè UpMizik la (<strong>Mr clauvens</strong>) ap verifye transfè MonCash / NatCash ou an.
+                Pou asire sekirite platfòm nan ak tout atis yo, Administratè UpMizik la (<strong>Mr clauvens</strong>) ap verifye transfè {activePaymentMethods.map(m => m.name).join(' / ') || 'MonCash / NatCash'} ou an.
               </p>
             </div>
 
@@ -1295,7 +1298,7 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
                 Kont Ou an ap Tann Validasyon pa Admin
               </h3>
               <p className="text-xs text-slate-300 mt-1">
-                Bonjou <strong className="text-yellow-300">{tempArtist.stageName}</strong>, prèv peman $4.99 USD (723.55 HTG) ou an anba revizyon pa <strong>Mr clauvens (Admin)</strong>.
+                Bonjou <strong className="text-yellow-300">{tempArtist.stageName}</strong>, prèv peman ${(tempArtist.registrationFeeUsd ?? regFeeUsd).toFixed(2)} USD ({(tempArtist.registrationFeeHtg ?? regFeeHtg).toLocaleString()} HTG) ou an anba revizyon pa <strong>Mr clauvens (Admin)</strong>.
               </p>
             </div>
 
@@ -1344,7 +1347,7 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
                 Prèv Enskripsyon w lan Mande Revizyon
               </h3>
               <p className="text-xs text-slate-300 mt-0.5">
-                Bonjou <strong>{tempArtist.stageName}</strong>, Administratè a pa t ka valide foto prèv transfè $4.99 ou a.
+                Bonjou <strong>{tempArtist.stageName}</strong>, Administratè a pa t ka valide foto prèv transfè ${(tempArtist.registrationFeeUsd ?? regFeeUsd).toFixed(2)} USD ou a.
               </p>
             </div>
 
@@ -1360,11 +1363,23 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
             </div>
 
             {/* Official Accounts Card */}
-            <div className="bg-[#05070a] border border-white/[0.1] rounded-2xl p-3 text-center text-xs space-y-1">
-              <p className="text-blue-300 font-bold text-[11px]">KONT OFISYÈL POU VOYE 723.55 GOUD ($4.99 USD) LA:</p>
-              <p className="font-mono font-black text-yellow-300 text-xs">
-                Natcash: 35-37-1184 | Moncash: 38-91-2317 (Clauvens EXAUS)
+            <div className="bg-[#05070a] border border-white/[0.1] rounded-2xl p-3.5 text-center text-xs space-y-2">
+              <p className="text-blue-300 font-bold text-[11px]">
+                KONT OFISYÈL POU VOYE {(tempArtist.registrationFeeHtg ?? regFeeHtg).toLocaleString()} GOUD (${(tempArtist.registrationFeeUsd ?? regFeeUsd).toFixed(2)} USD) LA:
               </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
+                {activePaymentMethods.map(m => (
+                  <div key={m.id} className="bg-white/[0.04] p-2 rounded-xl border border-white/[0.06] flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-medium block">{m.name}</span>
+                      <span className="font-mono font-bold text-yellow-300 text-xs select-all">{m.accountNumberOrId}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-300 truncate max-w-[110px] text-right font-medium">
+                      {m.accountHolderName}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* New File Upload */}

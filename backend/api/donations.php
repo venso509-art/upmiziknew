@@ -220,34 +220,63 @@ if ($method === 'POST') {
     $artistShare = (float)($data['artistShare'] ?? ($amount * 0.85));
     $platformShare = (float)($data['platformShare'] ?? ($amount * 0.15));
 
-    $stmt = $pdo->prepare("
-        INSERT INTO dons (
-            id, musique_id, titre_musique, artiste_id, nom_artiste, montant,
-            devise, nom_donateur, telephone_donateur, preuve_url, methode_paiement,
-            statut, part_artiste, part_plateforme, date_don
-        ) VALUES (
-            ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?,
-            ?, ?, ?, NOW()
-        )
-        ON DUPLICATE KEY UPDATE
-            statut = VALUES(statut),
-            preuve_url = VALUES(preuve_url)
-    ");
+    try {
+        // Asire atis la egziste nan tab 'artistes' pou evite vyolasyon foreign key (fk_dons_artiste)
+        $checkArtist = $pdo->prepare("SELECT id FROM artistes WHERE id = ?");
+        $checkArtist->execute([$artistId]);
+        if (!$checkArtist->fetch()) {
+            $insArtist = $pdo->prepare("
+                INSERT INTO artistes (id, nom_scene, nom_complet, email, telephone, ville, pin, statut, total_ecoutes, total_dons)
+                VALUES (?, ?, ?, ?, 'N/A', 'Pòtoprens', '1234', 'actif', 0, 0)
+                ON DUPLICATE KEY UPDATE nom_scene = VALUES(nom_scene)
+            ");
+            $insArtist->execute([
+                $artistId,
+                $artistName ?: 'Atis UpMizik',
+                $artistName ?: 'Atis UpMizik',
+                $artistId . '@upmizik.com'
+            ]);
+        }
 
-    $stmt->execute([
-        $id, $musicId, $musicTitle, $artistId, $artistName, $amount,
-        $currency, $donorName, $donorPhone, $proofUrl, $paymentMethod,
-        $status, $artistShare, $platformShare
-    ]);
+        $stmt = $pdo->prepare("
+            INSERT INTO dons (
+                id, musique_id, titre_musique, artiste_id, nom_artiste, montant,
+                devise, nom_donateur, telephone_donateur, preuve_url, methode_paiement,
+                statut, part_artiste, part_plateforme, date_don
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, NOW()
+            )
+            ON DUPLICATE KEY UPDATE
+                statut = VALUES(statut),
+                preuve_url = VALUES(preuve_url),
+                nom_donateur = VALUES(nom_donateur),
+                telephone_donateur = VALUES(telephone_donateur)
+        ");
 
-    jsonResponse([
-        'success' => true,
-        'message' => 'Donasyon an anrejistre avèk siksè nan baz done a (estati: pending)!',
-        'data' => ['donationId' => $id],
-        'donationId' => $id,
-        'errors' => []
-    ], 201);
+        $stmt->execute([
+            $id, $musicId, $musicTitle, $artistId, $artistName, $amount,
+            $currency, $donorName, $donorPhone, $proofUrl, $paymentMethod,
+            $status, $artistShare, $platformShare
+        ]);
+
+        jsonResponse([
+            'success' => true,
+            'message' => 'Donasyon an anrejistre avèk siksè nan baz done a (estati: pending)!',
+            'data' => ['donationId' => $id],
+            'donationId' => $id,
+            'errors' => []
+        ], 201);
+    } catch (Exception $e) {
+        error_log("[donations.php] Erè anrejistreman donasyon: " . $e->getMessage());
+        jsonResponse([
+            'success' => false,
+            'message' => 'Erè pandan anrejistreman donasyon: ' . $e->getMessage(),
+            'data' => null,
+            'errors' => [$e->getMessage()]
+        ], 500);
+    }
 }
 
 // ----------------------------------------------------------

@@ -35,6 +35,7 @@ import {
 import { IdbStorage } from './idbStorage';
 import { buildAwardCelebrationMessage, AwardTierDefinition } from './awardsUtils';
 import { UserIdentifier } from './userIdentifier';
+import { UpMizikAPI } from './apiService';
 
 const KEYS = {
   MUSIC: 'upmizik_music_v2',
@@ -2201,13 +2202,16 @@ upmizik.com • notifications@upmizik.com`,
     return newEmail;
   },
 
-  // NOTIFICATION 2: Instant confirmation when an artist submits their registration & $4.99 proof
+  // NOTIFICATION 2: Instant confirmation when an artist submits their registration & fee proof
   sendArtistRegistrationPendingEmail: (artist: ArtistUser): ArtistInboxMessage => {
     const nowTime = new Date().toLocaleString('ht-HT', {
       dateStyle: 'medium',
       timeStyle: 'short'
     });
     const artistEmail = artist.email || `${artist.stageName.toLowerCase().replace(/\s+/g, '')}@upmizik.com`;
+    const paymentCfg = StorageService.getPaymentSettings();
+    const feeUsd = artist.registrationFeeUsd ?? paymentCfg.artistRegistrationFeeUsd ?? 4.99;
+    const feeHtg = artist.registrationFeeHtg ?? paymentCfg.artistRegistrationFeeHtg ?? Math.round(feeUsd * (paymentCfg.htgExchangeRate || 145));
 
     const newEmail: ArtistInboxMessage = {
       id: `msg-reg-pending-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -2215,17 +2219,17 @@ upmizik.com • notifications@upmizik.com`,
       artistName: artist.stageName,
       artistEmail,
       type: 'registration_received',
-      subject: `📋 Demann Enskripsyon Resevwa: Prèv $4.99 ou an voye bay Admin pou revizyon`,
+      subject: `📋 Demann Enskripsyon Resevwa: Prèv $${feeUsd.toFixed(2)} USD ou an voye bay Admin pou revizyon`,
       senderName: 'UpMizik Enskripsyon & Validasyon',
       senderEmail: 'admin.upmizik@gmail.com',
       recipientEmail: artistEmail,
       receivedAt: 'Fenk Rive (Kounye a)',
       isRead: false,
       isStarred: true,
-      previewText: `Nou resevwa dosye enskripsyon w ak prèv transfè $4.99 USD (723.55 HTG) la avèk siksè. Administratè a ap valide kont ou an trè byento.`,
+      previewText: `Nou resevwa dosye enskripsyon w ak prèv transfè $${feeUsd.toFixed(2)} USD (${feeHtg.toLocaleString()} HTG) la avèk siksè. Administratè a ap valide kont ou an trè byento.`,
       bodyText: `Chè ${artist.stageName} (${artist.name}),
 
-Nou byen resevwa fòmilè enskripsyon w ak foto prèv transfè frè ouvèti kont $4.99 USD (723.55 HTG) sou UpMizik!
+Nou byen resevwa fòmilè enskripsyon w ak foto prèv transfè frè ouvèti kont $${feeUsd.toFixed(2)} USD (${feeHtg.toLocaleString()} HTG) sou UpMizik!
 
 Rezime Dosye w la:
 --------------------------------------------------
@@ -2382,6 +2386,10 @@ Sèvè Notifikasyon: upmizik.com • admin.upmizik@gmail.com`,
     });
     const artistEmail = artist.email || `${artist.stageName.toLowerCase().replace(/\s+/g, '')}@upmizik.com`;
 
+    const paymentCfg = StorageService.getPaymentSettings();
+    const feeUsd = artist.registrationFeeUsd ?? paymentCfg.artistRegistrationFeeUsd ?? 4.99;
+    const feeHtg = artist.registrationFeeHtg ?? paymentCfg.artistRegistrationFeeHtg ?? Math.round(feeUsd * (paymentCfg.htgExchangeRate || 145));
+
     const newEmail: ArtistInboxMessage = {
       id: `msg-verify-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       artistId: artist.id,
@@ -2395,10 +2403,10 @@ Sèvè Notifikasyon: upmizik.com • admin.upmizik@gmail.com`,
       receivedAt: 'Fenk Rive (Kounye a)',
       isRead: false,
       isStarred: true,
-      previewText: `Administratè ${adminName} valide frè $4.99 ou an. Kont ou vin verifye e ou gen aksè konplè nan Espas Atis ou kounye a!`,
+      previewText: `Administratè ${adminName} valide frè $${feeUsd.toFixed(2)} ou an. Kont ou vin verifye e ou gen aksè konplè nan Espas Atis ou kounye a!`,
       bodyText: `Chè ${artist.stageName} (${artist.name}),
 
-Nou gen gwo plezi pou nou enfòme w ke Administratè UpMizik (${adminName}) fin verifye epi valide prèv peman frè enskripsyon $4.99 USD (723.55 HTG) ou an avèk siksè!
+Nou gen gwo plezi pou nou enfòme w ke Administratè UpMizik (${adminName}) fin verifye epi valide prèv peman frè enskripsyon $${feeUsd.toFixed(2)} USD (${feeHtg.toLocaleString()} HTG) ou an avèk siksè!
 
 Kont atis ou an vin gen badj Verifye Ofisyèl (✅) kounye a sou tout platfòm UpMizik la.
 
@@ -2437,6 +2445,11 @@ upmizik.com | admin.upmizik@gmail.com | upmizik@gmail.com`
     });
     const artistEmail = artist.email || `${artist.stageName.toLowerCase().replace(/\s+/g, '')}@upmizik.com`;
     const reasonText = customReason || 'Foto prèv transfè MonCash/Natcash ou te telechaje a pa klè oswa nimewo tranzaksyon an pa kowenside.';
+    const paymentCfg = StorageService.getPaymentSettings();
+    const feeUsd = artist.registrationFeeUsd ?? paymentCfg.artistRegistrationFeeUsd ?? 4.99;
+    const feeHtg = artist.registrationFeeHtg ?? paymentCfg.artistRegistrationFeeHtg ?? Math.round(feeUsd * (paymentCfg.htgExchangeRate || 145));
+    const activeMethods = paymentCfg.methods.filter(m => m.isActive);
+    const methodsSummary = activeMethods.map(m => `   - ${m.name}: ${m.accountNumberOrId} (${m.accountHolderName})`).join('\n') || '   - Moncash / Natcash ofisyèl';
 
     const newEmail: ArtistInboxMessage = {
       id: `msg-reject-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -2444,26 +2457,25 @@ upmizik.com | admin.upmizik@gmail.com | upmizik@gmail.com`
       artistName: artist.stageName,
       artistEmail,
       type: 'account_rejected',
-      subject: `⚠️ Avi sou Enskripsyon Atis UpMizik: Prèv $4.99 ou an mande revizyon`,
+      subject: `⚠️ Avi sou Enskripsyon Atis UpMizik: Prèv $${feeUsd.toFixed(2)} ou an mande revizyon`,
       senderName: 'UpMizik Administrasyon',
       senderEmail: 'admin.upmizik@gmail.com',
       recipientEmail: artistEmail,
       receivedAt: 'Fenk Rive (Kounye a)',
       isRead: false,
       isStarred: true,
-      previewText: `Prèv transfè $4.99 la pa t ka valide pa Admin ${adminName}. Tanpri konekte sou UpMizik pou w re-telechaje yon prèv valab.`,
+      previewText: `Prèv transfè $${feeUsd.toFixed(2)} la pa t ka valide pa Admin ${adminName}. Tanpri konekte sou UpMizik pou w re-telechaje yon prèv valab.`,
       bodyText: `Bonjou ${artist.stageName},
 
-Nou verifye demann enskripsyon kont atis ou a sou UpMizik, men nou regrèt fè w konnen ke prèv transfè frè $4.99 USD (723.55 Goud) la pa t ka valide pou moman an.
+Nou verifye demann enskripsyon kont atis ou a sou UpMizik, men nou regrèt fè w konnen ke prèv transfè frè $${feeUsd.toFixed(2)} USD (${feeHtg.toLocaleString()} Goud) la pa t ka valide pou moman an.
 
 Rezon ki bay sa:
 --------------------------------------------------
 ${reasonText}
 
 Kijan pou w re-soumèt prèv la pou aktive kont ou:
-1. Asire w ou voye 723.55 Goud sou kont ofisyèl yo:
-   - Natcash: 35-37-1184 (Clauvens EXAUS)
-   - Moncash: 38-91-2317 (Clauvens EXAUS)
+1. Asire w ou voye ${feeHtg.toLocaleString()} Goud ($${feeUsd.toFixed(2)} USD) sou kont ofisyèl yo:
+${methodsSummary}
 2. Pran yon screenshot klè kote nimewo tranzaksyon an ak montan an vizib byen.
 3. Louvri UpMizik, klike sou "Konekte kòm Atis", antre imèl ou (${artist.email}) ak Kòd PIN ou, epi telechaje nouvo foto prèv la.
 
@@ -3076,7 +3088,7 @@ upmizik.com • admin.upmizik@gmail.com`,
     return DEFAULT_PAYMENT_SETTINGS;
   },
 
-  savePaymentSettings: (config: PaymentSettingsConfig): void => {
+  savePaymentSettings: (config: PaymentSettingsConfig, syncToCloud = true): void => {
     const updated: PaymentSettingsConfig = {
       ...config,
       updatedAt: new Date().toISOString()
@@ -3088,6 +3100,16 @@ upmizik.com • admin.upmizik@gmail.com`,
       window.dispatchEvent(new CustomEvent('upmizik_payment_settings_changed', { detail: updated }));
     } catch (e) {
       // Ignore in non-browser context
+    }
+
+    if (syncToCloud) {
+      try {
+        UpMizikAPI.savePaymentSettings(updated).catch((err) => {
+          console.warn('[StorageService] Erè senkronizasyon paramèt peman nan nwaj la:', err);
+        });
+      } catch (e) {
+        // Fallback silansye
+      }
     }
   },
 

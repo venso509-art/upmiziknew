@@ -14,7 +14,8 @@ import {
   ArtistInboxMessage,
   ArchiveRecord,
   PubItem,
-  RpaItem
+  RpaItem,
+  PaymentSettingsConfig
 } from '../types';
 import { UpMizikAPI } from './apiService';
 import { StorageService } from './storage';
@@ -27,6 +28,8 @@ class HostingerSyncService {
   private eventSource: EventSource | null = null;
   private autoRefetchTimer: any = null;
   private isRefetchingMusic = false;
+  private isRefetchingArtists = false;
+  private isRefetchingDonations = false;
   private tabId = 'tab_' + Math.random().toString(36).substring(2, 9);
 
   constructor() {
@@ -92,6 +95,24 @@ class HostingerSyncService {
         } catch {}
       });
 
+      es.addEventListener('artists_update', () => {
+        try {
+          this.fetchArtistsAndNotify(true);
+        } catch {}
+      });
+
+      es.addEventListener('donations_update', () => {
+        try {
+          this.fetchDonationsAndNotify(true);
+        } catch {}
+      });
+
+      es.addEventListener('payment_settings_update', () => {
+        try {
+          this.fetchPaymentSettingsAndNotify(true);
+        } catch {}
+      });
+
       es.addEventListener('connected', () => {
         // SSE konekte avèk siksè
       });
@@ -154,6 +175,71 @@ class HostingerSyncService {
     }
   }
 
+  /**
+   * Refetch atis yo sou sèvè Hostinger MySQL epi difize bay tout abòne yo si gen chanjman
+   */
+  async fetchArtistsAndNotify(forceNotify = false): Promise<ArtistUser[]> {
+    if (this.isRefetchingArtists) {
+      return StorageService.getArtists();
+    }
+    this.isRefetchingArtists = true;
+    try {
+      const serverArtists = await UpMizikAPI.getArtists();
+      if (serverArtists && serverArtists.length > 0) {
+        const localArtists = StorageService.getArtists();
+        const serverMap = new Map(serverArtists.map((a) => [a.id, a]));
+        const localMap = new Map(localArtists.map((a) => [a.id, a]));
+
+        let hasDifferences = forceNotify || serverArtists.length !== localArtists.length;
+
+        if (!hasDifferences) {
+          for (const sa of serverArtists) {
+            const la = localMap.get(sa.id);
+            if (!la || la.status !== sa.status || la.stageName !== sa.stageName || la.registrationProofUrl !== sa.registrationProofUrl) {
+              hasDifferences = true;
+              break;
+            }
+          }
+        }
+
+        if (hasDifferences) {
+          const merged: ArtistUser[] = [];
+          const processedIds = new Set<string>();
+
+          for (const sa of serverArtists) {
+            const la = localMap.get(sa.id);
+            if (la) {
+              if (la.status && la.status !== 'pending' && sa.status === 'pending') {
+                merged.push({ ...sa, ...la, status: la.status });
+              } else {
+                merged.push({ ...sa, ...la });
+              }
+            } else {
+              merged.push(sa);
+            }
+            processedIds.add(sa.id);
+          }
+
+          for (const la of localArtists) {
+            if (!processedIds.has(la.id)) {
+              merged.push(la);
+            }
+          }
+
+          StorageService.saveArtists(merged);
+          this.emitChange('artists', merged);
+          return merged;
+        }
+      }
+      return StorageService.getArtists();
+    } catch (e) {
+      console.warn('[HostingerService] fetchArtistsAndNotify warn:', e);
+      return StorageService.getArtists();
+    } finally {
+      this.isRefetchingArtists = false;
+    }
+  }
+
   async syncArtists(list: ArtistUser[]) {
     try {
       StorageService.saveArtists(list);
@@ -176,6 +262,9 @@ class HostingerSyncService {
     const current = StorageService.getArtists();
     callback(current);
 
+    // Tcheke sèvè a an tan reyèl imedyatman an background
+    this.fetchArtistsAndNotify().catch(() => {});
+
     return () => {
       set.delete(callback);
     };
@@ -195,12 +284,15 @@ class HostingerSyncService {
       StorageService.saveArtists(updated);
       this.emitChange('artists', updated);
 
-      // Voye nan backend Hostinger MySQL
-      if (idx >= 0) {
+      // Voye nan backend Hostinger MySQL (POST upsert avèk ON DUPLICATE KEY UPDATE)
+      const res = await UpMizikAPI.registerArtist(artist);
+      if (!res.success) {
         await UpMizikAPI.updateArtist(artist.id, artist);
-      } else {
-        await UpMizikAPI.registerArtist(artist);
       }
+
+      setTimeout(() => {
+        this.fetchArtistsAndNotify(true);
+      }, 400);
     } catch (e) {
       console.warn('[HostingerService] saveSingleArtist warn:', e);
     }
@@ -296,8 +388,10 @@ class HostingerSyncService {
   startAutoRefetch(intervalMs = 8000): Unsubscribe {
     if (typeof window === 'undefined') return () => {};
 
-    // 1. Kouri refetch inisyal
+    // 1. Kouri refetch inisyal pou mizik, atis, ak donasyon
     this.fetchMusicAndNotify();
+    this.fetchArtistsAndNotify();
+    this.fetchDonationsAndNotify();
 
     // 2. Enteval regilye
     if (this.autoRefetchTimer) {
@@ -305,19 +399,27 @@ class HostingerSyncService {
     }
     this.autoRefetchTimer = setInterval(() => {
       this.fetchMusicAndNotify();
+      this.fetchArtistsAndNotify();
+      this.fetchDonationsAndNotify();
     }, intervalMs);
 
     // 3. Lè itilizatè a retounen sou paj la (Visibility / Focus / Online)
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         this.fetchMusicAndNotify();
+        this.fetchArtistsAndNotify();
+        this.fetchDonationsAndNotify();
       }
     };
     const handleFocus = () => {
       this.fetchMusicAndNotify();
+      this.fetchArtistsAndNotify();
+      this.fetchDonationsAndNotify();
     };
     const handleOnline = () => {
       this.fetchMusicAndNotify();
+      this.fetchArtistsAndNotify();
+      this.fetchDonationsAndNotify();
     };
 
     document.addEventListener('visibilitychange', handleVisibility);
@@ -418,7 +520,80 @@ class HostingerSyncService {
   // DONATIONS (SIPÒ & DONASYON)
   // ==========================================
   async fetchDonations(): Promise<DonationItem[] | null> {
-    return StorageService.getDonations();
+    try {
+      const apiDonations = await UpMizikAPI.getDonations();
+      if (apiDonations && apiDonations.length > 0) {
+        return apiDonations;
+      }
+      return StorageService.getDonations();
+    } catch {
+      return StorageService.getDonations();
+    }
+  }
+
+  /**
+   * Refetch donasyon yo sou sèvè Hostinger MySQL epi difize bay tout abòne yo si gen chanjman
+   */
+  async fetchDonationsAndNotify(forceNotify = false): Promise<DonationItem[]> {
+    if (this.isRefetchingDonations) {
+      return StorageService.getDonations();
+    }
+    this.isRefetchingDonations = true;
+    try {
+      const serverDonations = await UpMizikAPI.getDonations();
+      if (serverDonations && serverDonations.length > 0) {
+        const localDonations = StorageService.getDonations();
+        const serverMap = new Map(serverDonations.map((d) => [d.id, d]));
+        const localMap = new Map(localDonations.map((d) => [d.id, d]));
+
+        let hasDifferences = forceNotify || serverDonations.length !== localDonations.length;
+
+        if (!hasDifferences) {
+          for (const sd of serverDonations) {
+            const ld = localMap.get(sd.id);
+            if (!ld || ld.status !== sd.status || ld.amount !== sd.amount || ld.proofUrl !== sd.proofUrl) {
+              hasDifferences = true;
+              break;
+            }
+          }
+        }
+
+        if (hasDifferences) {
+          const merged: DonationItem[] = [];
+          const processedIds = new Set<string>();
+
+          for (const sd of serverDonations) {
+            const ld = localMap.get(sd.id);
+            if (ld) {
+              if (ld.status && ld.status !== 'pending' && sd.status === 'pending') {
+                merged.push({ ...sd, ...ld, status: ld.status });
+              } else {
+                merged.push({ ...sd, ...ld });
+              }
+            } else {
+              merged.push(sd);
+            }
+            processedIds.add(sd.id);
+          }
+
+          for (const ld of localDonations) {
+            if (!processedIds.has(ld.id)) {
+              merged.push(ld);
+            }
+          }
+
+          StorageService.saveDonations(merged);
+          this.emitChange('donations', merged);
+          return merged;
+        }
+      }
+      return StorageService.getDonations();
+    } catch (e) {
+      console.warn('[HostingerService] fetchDonationsAndNotify warn:', e);
+      return StorageService.getDonations();
+    } finally {
+      this.isRefetchingDonations = false;
+    }
   }
 
   subscribeToDonations(callback: (donations: DonationItem[]) => void): Unsubscribe {
@@ -430,6 +605,9 @@ class HostingerSyncService {
 
     const current = StorageService.getDonations();
     callback(current);
+
+    // Tcheke sèvè a an tan reyèl imedyatman an background
+    this.fetchDonationsAndNotify().catch(() => {});
 
     return () => {
       set.delete(callback);
@@ -450,8 +628,20 @@ class HostingerSyncService {
       StorageService.saveDonations(updated);
       this.emitChange('donations', updated);
 
+      // Asire atis la egziste nan baz done sèvè a anvan pou evite vyolasyon foreign key (fk_dons_artiste)
+      if (don.artistId) {
+        const localArtist = StorageService.getArtists().find((a) => a.id === don.artistId);
+        if (localArtist) {
+          await UpMizikAPI.registerArtist(localArtist).catch(() => {});
+        }
+      }
+
       // Voye nan Hostinger MySQL
       await UpMizikAPI.submitDonation(don);
+
+      setTimeout(() => {
+        this.fetchDonationsAndNotify(true);
+      }, 400);
     } catch (e) {
       console.warn('[HostingerService] saveSingleDonation warn:', e);
     }
@@ -700,6 +890,63 @@ class HostingerSyncService {
     const set = this.listeners.get('pubs')!;
     set.add(callback);
     callback(StorageService.getPubs());
+    return () => {
+      set.delete(callback);
+    };
+  }
+
+  // ==========================================
+  // PAYMENT SETTINGS & METHODS (PARAMÈT PEMAN & FRÈ ENSKRIPSYON)
+  // ==========================================
+  async fetchPaymentSettings(): Promise<PaymentSettingsConfig | null> {
+    try {
+      return await UpMizikAPI.getPaymentSettings();
+    } catch (e) {
+      console.warn('[HostingerService] fetchPaymentSettings warn:', e);
+      return null;
+    }
+  }
+
+  async savePaymentSettings(config: PaymentSettingsConfig): Promise<boolean> {
+    try {
+      const ok = await UpMizikAPI.savePaymentSettings(config);
+      this.emitChange('payment_settings', config);
+      return ok;
+    } catch (e) {
+      console.warn('[HostingerService] savePaymentSettings warn:', e);
+      return false;
+    }
+  }
+
+  async fetchPaymentSettingsAndNotify(forceNotify = false): Promise<void> {
+    try {
+      const cloudSettings = await this.fetchPaymentSettings();
+      if (cloudSettings && typeof cloudSettings === 'object' && Array.isArray(cloudSettings.methods)) {
+        const local = StorageService.getPaymentSettings();
+        const isDifferent =
+          cloudSettings.artistRegistrationFeeUsd !== local.artistRegistrationFeeUsd ||
+          cloudSettings.htgExchangeRate !== local.htgExchangeRate ||
+          cloudSettings.artistRegistrationFeeHtg !== local.artistRegistrationFeeHtg ||
+          cloudSettings.methods?.length !== local.methods?.length ||
+          JSON.stringify(cloudSettings.methods) !== JSON.stringify(local.methods);
+
+        if (isDifferent || forceNotify) {
+          StorageService.savePaymentSettings(cloudSettings, false);
+          this.emitChange('payment_settings', cloudSettings);
+        }
+      }
+    } catch (e) {
+      console.warn('[HostingerService] fetchPaymentSettingsAndNotify warn:', e);
+    }
+  }
+
+  subscribeToPaymentSettings(callback: (settings: PaymentSettingsConfig) => void): Unsubscribe {
+    if (!this.listeners.has('payment_settings')) {
+      this.listeners.set('payment_settings', new Set());
+    }
+    const set = this.listeners.get('payment_settings')!;
+    set.add(callback);
+    callback(StorageService.getPaymentSettings());
     return () => {
       set.delete(callback);
     };

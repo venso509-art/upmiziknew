@@ -1,5 +1,5 @@
 /** UTF-8: UpMizik Panèl Administratè - Jere atis, mizik, peman ak sekirite **/
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   AdminUser,
   MusicItem,
@@ -11,7 +11,8 @@ import {
   MusicCategory,
   ReleaseFormat,
   MusicCredit,
-  SocialPost
+  SocialPost,
+  PaymentSettingsConfig
 } from '../types';
 import {
   ShieldCheck,
@@ -239,7 +240,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('reports');
   const [currencyMode, setCurrencyMode] = useState<'both' | 'USD' | 'HTG'>('both');
-  const [exchangeRate, setExchangeRate] = useState<number>(DEFAULT_HTG_EXCHANGE_RATE);
+  const [exchangeRate, setExchangeRate] = useState<number>(() => StorageService.getPaymentSettings().htgExchangeRate || DEFAULT_HTG_EXCHANGE_RATE);
+  const [artistRegistrationFeeUsd, setArtistRegistrationFeeUsd] = useState<number>(() => StorageService.getPaymentSettings().artistRegistrationFeeUsd ?? 4.99);
+
+  // Sync settings dynamically when admin updates payment methods or fees
+  useEffect(() => {
+    const handleSettingsChanged = (e: Event) => {
+      const customEvent = e as CustomEvent<PaymentSettingsConfig>;
+      if (customEvent.detail) {
+        if (customEvent.detail.htgExchangeRate) setExchangeRate(customEvent.detail.htgExchangeRate);
+        if (customEvent.detail.artistRegistrationFeeUsd !== undefined) setArtistRegistrationFeeUsd(customEvent.detail.artistRegistrationFeeUsd);
+      }
+    };
+    window.addEventListener('upmizik_payment_settings_changed', handleSettingsChanged);
+    return () => window.removeEventListener('upmizik_payment_settings_changed', handleSettingsChanged);
+  }, []);
 
   // Artist Management States
   const [artistSearchQuery, setArtistSearchQuery] = useState<string>('');
@@ -913,7 +928,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     window.addEventListener('upmizik_music_updated', handleStorageOrCustomSync);
     window.addEventListener('storage', handleStorageOrCustomSync);
 
+    // Kouri chèk imedyat epi polling chak 4 segonn pou garanti nouvo atis ak donasyon parèt imedyatman
+    HostingerService.fetchArtistsAndNotify(true).catch(() => {});
+    HostingerService.fetchDonationsAndNotify(true).catch(() => {});
+    const adminPollTimer = setInterval(() => {
+      HostingerService.fetchArtistsAndNotify().catch(() => {});
+      HostingerService.fetchDonationsAndNotify().catch(() => {});
+    }, 4000);
+
     return () => {
+      clearInterval(adminPollTimer);
       unsubscribeArtists();
       unsubscribeDonations();
       window.removeEventListener('upmizik_artist_updated', handleArtistCustomSync);
@@ -1278,9 +1302,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const platformVisitsCount = useMemo(() => StorageService.getSiteVisits(), []);
   const totalGlobalListensCount = useMemo(() => musicList.reduce((acc, m) => acc + (m.listens || 0), 0), [musicList]);
 
-  // Artist registration fee calculations ($4.99 USD)
-  const totalArtistRegistrationFeesCollected = activeArtists.length * 4.99;
-  const pendingArtistRegistrationFees = pendingArtists.length * 4.99;
+  // Artist registration fee calculations (Dynamic platform fee)
+  const totalArtistRegistrationFeesCollected = activeArtists.reduce((sum, a) => sum + (a.registrationFeeUsd ?? artistRegistrationFeeUsd), 0);
+  const pendingArtistRegistrationFees = pendingArtists.reduce((sum, a) => sum + (a.registrationFeeUsd ?? artistRegistrationFeeUsd), 0);
 
   // Helper formatting functions for dual USD + HTG
   const toHtg = (usd: number) => usd * exchangeRate;
@@ -1649,12 +1673,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <p className="text-[10px] text-slate-500 pt-1">Frè antretyen, sèvè ak sèvis</p>
         </div>
 
-        {/* 4. Total Artist Registration Fees ($4.99 / 723.55 HTG) */}
+        {/* 4. Total Artist Registration Fees */}
         <div className="bg-[#0a0f1d]/90 border border-white/[0.08] p-5 rounded-2xl backdrop-blur-xl space-y-1">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase text-slate-400">Frè Enskripsyon Atis</p>
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              $4.99 / Atis
+              ${artistRegistrationFeeUsd.toFixed(2)} / Atis
             </span>
           </div>
           <div className="pt-1">
@@ -1865,7 +1889,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* 1. Live Artist Registration Toasts */}
           {liveArtistToasts.map((toastItem) => {
             const { id: toastId, artist: art } = toastItem;
-            const artFeeHtg = Math.round(toHtg(4.99));
+            const artFeeUsd = art.registrationFeeUsd ?? artistRegistrationFeeUsd;
+            const artFeeHtg = art.registrationFeeHtg ?? Math.round(toHtg(artFeeUsd));
 
             return (
               <div
@@ -1926,7 +1951,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   <div className="text-right shrink-0 bg-purple-400/10 border border-purple-400/30 px-2.5 py-1 rounded-lg">
                     <span className="text-sm font-black text-purple-300 font-mono block">
-                      $4.99 USD
+                      ${artFeeUsd.toFixed(2)} USD
                     </span>
                     <span className="text-[10px] text-slate-300 font-mono block">
                       ~{artFeeHtg.toLocaleString()} HTG
@@ -1946,7 +1971,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             title: `Prèv Frè Enskripsyon - ${art.stageName}`,
                             donorOrArtistName: `${art.stageName} (${art.name})`,
                             phone: art.phone || 'N/A',
-                            amount: `$4.99 USD (~${artFeeHtg.toLocaleString()} HTG)`,
+                            amount: `$${artFeeUsd.toFixed(2)} USD (~${artFeeHtg.toLocaleString()} HTG)`,
                             date: new Date(art.createdAt || Date.now()).toLocaleString('fr-FR'),
                             type: 'artist_fee'
                           });
@@ -2181,7 +2206,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2 flex-wrap">
                     <span>Dènye enskripsyon atis:</span>
                     <span className="text-purple-300 font-bold">{recentLiveArtists[0].stageName || recentLiveArtists[0].name}</span>
-                    <span className="text-slate-300 font-mono text-xs">({recentLiveArtists[0].city || 'Ayiti'} • $4.99 USD)</span>
+                    <span className="text-slate-300 font-mono text-xs">({recentLiveArtists[0].city || 'Ayiti'} • ${(recentLiveArtists[0].registrationFeeUsd ?? artistRegistrationFeeUsd).toFixed(2)} USD)</span>
                   </h3>
                 ) : null}
 
@@ -2404,7 +2429,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {pendingArtists.length > 0 && pendingDonations.length > 0 ? (
                     <span>Gen <strong>{pendingArtists.length} nouvo demand atis</strong> ak <strong>{pendingDonations.length} nouvo donasyon sipò</strong> k ap tann pou w valide yo!</span>
                   ) : pendingArtists.length > 0 ? (
-                    <span>Gen <strong>{pendingArtists.length} nouvo dosye atis</strong> k ap tann revizyon prèv $4.99 USD ak validasyon!</span>
+                    <span>Gen <strong>{pendingArtists.length} nouvo dosye atis</strong> k ap tann revizyon prèv ${artistRegistrationFeeUsd.toFixed(2)} USD ak validasyon!</span>
                   ) : (
                     <span>Gen <strong>{pendingDonations.length} nouvo donasyon sipò</strong> k ap tann revizyon prèv MonCash/Natcash!</span>
                   )}
@@ -3278,7 +3303,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     )}
                   </h3>
                   <p className="text-xs text-slate-400 mt-1">
-                    Gere ak verifye prèv transfè Moncash / Natcash pou <strong>sipò fanatik</strong> ak <strong>frè enskripsyon atis ($4.99 USD)</strong>. Tout eleman valide oswa refize deplase otomatikman nan espas respektif yo.
+                    Gere ak verifye prèv transfè Moncash / Natcash pou <strong>sipò fanatik</strong> ak <strong>frè enskripsyon atis (${artistRegistrationFeeUsd.toFixed(2)} USD)</strong>. Tout eleman valide oswa refize deplase otomatikman nan espas respektif yo.
                   </p>
                 </div>
 
@@ -3436,7 +3461,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     }`}
                   >
                     <UserCheck className="w-3.5 h-3.5" />
-                    <span>Enskripsyon Atis ($4.99)</span>
+                    <span>Enskripsyon Atis (${artistRegistrationFeeUsd.toFixed(2)})</span>
                   </button>
 
                   <button
@@ -3486,7 +3511,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
-                {/* SECTION 1.A: PENDING ARTIST REGISTRATIONS ($4.99 USD) */}
+                {/* SECTION 1.A: PENDING ARTIST REGISTRATIONS */}
                 {(validationCategoryFilter === 'all' || validationCategoryFilter === 'artists') && (
                   <div className="bg-[#0a0f1d]/90 border border-amber-500/20 rounded-3xl p-5 sm:p-6 backdrop-blur-xl space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.08]">
@@ -3496,7 +3521,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                         <div>
                           <h4 className="text-base font-bold text-white flex items-center gap-2">
-                            <span>Prèv Peman Enskripsyon Atis ($4.99 USD)</span>
+                            <span>Prèv Peman Enskripsyon Atis (${artistRegistrationFeeUsd.toFixed(2)} USD)</span>
                             <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono font-bold">
                               {filteredPendingArtists.length} an atant
                             </span>
@@ -3525,7 +3550,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {filteredPendingArtists.map((art) => (
+                        {filteredPendingArtists.map((art) => {
+                          const artUsd = art.registrationFeeUsd ?? artistRegistrationFeeUsd;
+                          const artHtg = art.registrationFeeHtg ?? Math.round(artUsd * exchangeRate);
+
+                          return (
                           <div
                             key={art.id}
                             className="bg-[#05070a]/90 border border-amber-500/30 hover:border-amber-400 transition-all rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 backdrop-blur-md shadow-lg shadow-amber-950/10"
@@ -3538,10 +3567,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   onClick={() => {
                                     setProofModalInfo({
                                       url: art.registrationProofUrl!,
-                                      title: `Prèv Enskripsyon Nouvo Atis ($4.99 USD) - ${art.stageName}`,
+                                      title: `Prèv Enskripsyon Nouvo Atis ($${artUsd.toFixed(2)} USD) - ${art.stageName}`,
                                       donorOrArtistName: `${art.stageName} (${art.name})`,
                                       phone: art.phone || 'N/A',
-                                      amount: `$4.99 USD (~${Math.round(4.99 * exchangeRate).toLocaleString()} HTG)`,
+                                      amount: `$${artUsd.toFixed(2)} USD (~${artHtg.toLocaleString()} HTG)`,
                                       musicTitle: `Enskripsyon Kont Atis • Vil: ${art.city || 'Ayiti'}`,
                                       date: art.registrationDate,
                                       type: 'artist_fee'
@@ -3549,7 +3578,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     setProofZoom(1);
                                   }}
                                   className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border-2 border-amber-400/60 bg-black/60 shrink-0 group cursor-pointer shadow-lg hover:border-amber-400 transition-all"
-                                  title="Klike pou wè foto prèv $4.99 la an gwo"
+                                  title={`Klike pou wè foto prèv $${artUsd.toFixed(2)} la an gwo`}
                                 >
                                   <img
                                     src={art.registrationProofUrl}
@@ -3560,7 +3589,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     <Eye className="w-5 h-5 text-amber-300" />
                                   </div>
                                   <span className="absolute bottom-1 right-1 bg-amber-400 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded shadow">
-                                    $4.99
+                                    ${artUsd.toFixed(2)}
                                   </span>
                                 </button>
                               ) : (
@@ -3576,7 +3605,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   <span className="font-black text-white text-base tracking-tight">{art.stageName}</span>
                                   <span className="text-xs text-slate-400 font-medium">({art.name})</span>
                                   <span className="text-xs font-mono font-bold text-amber-300 bg-amber-500/15 px-2 py-0.5 rounded border border-amber-500/30">
-                                    Frè Enskripsyon: $4.99 USD (~{Math.round(4.99 * exchangeRate).toLocaleString()} HTG)
+                                    Frè Enskripsyon: ${artUsd.toFixed(2)} USD (~{artHtg.toLocaleString()} HTG)
                                   </span>
                                   <span className="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20 font-mono">
                                     ⏳ An Atant Validasyon
@@ -3608,10 +3637,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   onClick={() => {
                                     setProofModalInfo({
                                       url: art.registrationProofUrl!,
-                                      title: `Prèv Enskripsyon Nouvo Atis ($4.99 USD) - ${art.stageName}`,
+                                      title: `Prèv Enskripsyon Nouvo Atis ($${artUsd.toFixed(2)} USD) - ${art.stageName}`,
                                       donorOrArtistName: `${art.stageName} (${art.name})`,
                                       phone: art.phone || 'N/A',
-                                      amount: `$4.99 USD (~${Math.round(4.99 * exchangeRate).toLocaleString()} HTG)`,
+                                      amount: `$${artUsd.toFixed(2)} USD (~${artHtg.toLocaleString()} HTG)`,
                                       musicTitle: `Enskripsyon Kont Atis • Vil: ${art.city || 'Ayiti'}`,
                                       date: art.registrationDate,
                                       type: 'artist_fee'
@@ -3642,7 +3671,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 title="Valide kont atis sa a epi deplase l nan Espas Valide"
                               >
                                 <Check className="w-3.5 h-3.5" />
-                                <span>Valide Atis ($4.99)</span>
+                                <span>Valide Atis (${artUsd.toFixed(2)})</span>
                               </button>
 
                               <button
@@ -3659,7 +3688,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               </button>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -3831,7 +3861,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </span>
                           </h4>
                           <p className="text-xs text-slate-400">
-                            Atis ki gen frè enskripsyon $4.99 yo konfime epi kont yo aktif.
+                            Atis ki gen frè enskripsyon yo konfime epi kont yo aktif.
                           </p>
                         </div>
                       </div>
@@ -4080,7 +4110,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       title: `Prèv Enskripsyon Refize - ${art.stageName}`,
                                       donorOrArtistName: `${art.stageName} (${art.name})`,
                                       phone: art.phone || 'N/A',
-                                      amount: `$4.99 USD`,
+                                      amount: `$${(art.registrationFeeUsd ?? artistRegistrationFeeUsd).toFixed(2)} USD`,
                                       musicTitle: `Enskripsyon Atis (Refize)`,
                                       date: art.registrationDate,
                                       type: 'artist_fee'
@@ -4272,7 +4302,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           );
         }
 
-        const pendingFeesUsd = pendingList.length * 4.99;
+        const pendingFeesUsd = pendingList.reduce((sum, a) => sum + (a.registrationFeeUsd ?? artistRegistrationFeeUsd), 0);
         const pendingFeesHtg = Math.round(pendingFeesUsd * exchangeRate);
 
         return (
@@ -4289,11 +4319,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <h3 className="text-xl font-black text-white flex items-center gap-2">
                         <span>Sant Validasyon & Nouvo Demand Integrasyon Atis</span>
                         <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono">
-                          Frè $4.99 USD
+                          Frè ${artistRegistrationFeeUsd.toFixed(2)} USD
                         </span>
                       </h3>
                       <p className="text-xs text-slate-400">
-                        Kontwole tout nouvo demand enskripsyon yo, verifye prèv peman $4.99 (~{Math.round(4.99 * exchangeRate).toLocaleString()} HTG), epi valide oswa refize dosye atis yo.
+                        Kontwole tout nouvo demand enskripsyon yo, verifye prèv peman ${artistRegistrationFeeUsd.toFixed(2)} (~{Math.round(artistRegistrationFeeUsd * exchangeRate).toLocaleString()} HTG), epi valide oswa refize dosye atis yo.
                       </p>
                     </div>
                   </div>
@@ -4430,7 +4460,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {activeList.length} <span className="text-xs font-sans text-emerald-400/80 font-normal">apwouve</span>
                   </div>
                   <p className="text-[10px] text-emerald-200/80 font-mono mt-0.5">
-                    Frè kolekte: ${(activeList.length * 4.99).toFixed(2)} USD
+                    Frè kolekte: ${(activeList.reduce((sum, a) => sum + (a.registrationFeeUsd ?? artistRegistrationFeeUsd), 0)).toFixed(2)} USD
                   </p>
                 </div>
 
@@ -4741,12 +4771,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <button
                               type="button"
                               onClick={() => {
+                                const feeUsd = art.registrationFeeUsd ?? artistRegistrationFeeUsd;
+                                const feeHtg = art.registrationFeeHtg ?? Math.round(feeUsd * exchangeRate);
                                 setProofModalInfo({
                                   url: art.registrationProofUrl!,
-                                  title: `Prèv Peman Frè Enskripsyon Atis ($4.99 USD • 723.55 HTG)`,
+                                  title: `Prèv Peman Frè Enskripsyon Atis ($${feeUsd.toFixed(2)} USD • ${feeHtg.toLocaleString()} HTG)`,
                                   donorOrArtistName: `${art.stageName} (${art.name})`,
                                   phone: art.phone,
-                                  amount: '$4.99 USD (~723.55 HTG)',
+                                  amount: `$${feeUsd.toFixed(2)} USD (~${feeHtg.toLocaleString()} HTG)`,
                                   musicTitle: `Enskripsyon Kont Atis • Vil: ${art.city}`,
                                   date: art.registrationDate,
                                   type: 'artist_fee'
@@ -4754,18 +4786,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 setProofZoom(1);
                               }}
                               className="relative w-16 h-16 rounded-2xl overflow-hidden border-2 border-amber-400/50 bg-black/60 shrink-0 group cursor-pointer shadow-lg hover:border-amber-400 transition-all"
-                              title="Klike pou wè foto prèv $4.99 la an gwo"
+                              title={`Klike pou wè foto prèv $${(art.registrationFeeUsd ?? artistRegistrationFeeUsd).toFixed(2)} la an gwo`}
                             >
                               <img
                                 src={art.registrationProofUrl}
-                                alt={`Prèv $4.99 ${art.stageName}`}
+                                alt={`Prèv $${(art.registrationFeeUsd ?? artistRegistrationFeeUsd).toFixed(2)} ${art.stageName}`}
                                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                               />
                               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                 <Eye className="w-5 h-5 text-amber-300" />
                               </div>
                               <span className="absolute bottom-1 right-1 bg-amber-400 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded shadow">
-                                $4.99
+                                ${(art.registrationFeeUsd ?? artistRegistrationFeeUsd).toFixed(2)}
                               </span>
                             </button>
                           ) : (
@@ -4807,7 +4839,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               )}
 
                               <span className="text-[10px] bg-yellow-400/10 text-yellow-400 px-2 py-0.5 rounded-full border border-yellow-400/20 font-mono font-bold">
-                                Frè: $4.99 (~{Math.round(4.99 * exchangeRate).toLocaleString()} HTG)
+                                Frè: ${(art.registrationFeeUsd ?? artistRegistrationFeeUsd).toFixed(2)} (~{(art.registrationFeeHtg ?? Math.round((art.registrationFeeUsd ?? artistRegistrationFeeUsd) * exchangeRate)).toLocaleString()} HTG)
                               </span>
                             </div>
 
@@ -4894,12 +4926,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <button
                               type="button"
                               onClick={() => {
+                                const feeUsd = art.registrationFeeUsd ?? artistRegistrationFeeUsd;
+                                const feeHtg = art.registrationFeeHtg ?? Math.round(feeUsd * exchangeRate);
                                 setProofModalInfo({
                                   url: art.registrationProofUrl!,
-                                  title: `Prèv Peman Frè Enskripsyon Atis ($4.99 USD • 723.55 HTG)`,
+                                  title: `Prèv Peman Frè Enskripsyon Atis ($${feeUsd.toFixed(2)} USD • ${feeHtg.toLocaleString()} HTG)`,
                                   donorOrArtistName: `${art.stageName} (${art.name})`,
                                   phone: art.phone,
-                                  amount: '$4.99 USD (~723.55 HTG)',
+                                  amount: `$${feeUsd.toFixed(2)} USD (~${feeHtg.toLocaleString()} HTG)`,
                                   musicTitle: `Enskripsyon Kont Atis • Vil: ${art.city}`,
                                   date: art.registrationDate,
                                   type: 'artist_fee'
@@ -4909,7 +4943,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               className="px-3 py-2 rounded-xl text-xs font-semibold bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/30 flex items-center gap-1.5 transition-colors"
                             >
                               <Eye className="w-3.5 h-3.5" />
-                              <span>Gade Prèv $4.99</span>
+                              <span>Gade Prèv ${(art.registrationFeeUsd ?? artistRegistrationFeeUsd).toFixed(2)}</span>
                             </button>
                           )}
 
@@ -5197,7 +5231,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span className="text-3xl font-black text-amber-400 font-mono tracking-tight">
                       {pendingCount}
                     </span>
-                    <span className="text-xs text-amber-300/80">prèv $4.99 an atant</span>
+                    <span className="text-xs text-amber-300/80">prèv ${artistRegistrationFeeUsd.toFixed(2)} an atant</span>
                   </div>
                 </div>
               </div>
@@ -5779,7 +5813,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 type="button"
                                 onClick={() => handleOptimisticValidateArtist(art.id, true)}
                                 className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 shadow-lg shadow-emerald-950/40 active:scale-95 transition-all"
-                                title="Valide kont atis sa a ($4.99)"
+                                title={`Valide kont atis sa a ($${(art.registrationFeeUsd ?? artistRegistrationFeeUsd).toFixed(2)})`}
                               >
                                 <Check className="w-3.5 h-3.5" />
                                 <span>Valide Atis</span>
@@ -9286,7 +9320,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span className="text-xs text-slate-400 font-normal">({selectedArtistDossier.name})</span>
                   </h3>
                   <p className="text-xs text-amber-300 font-mono">
-                    Dosye Enskripsyon & Validasyon Frè $4.99 USD
+                    Dosye Enskripsyon & Validasyon Frè ${(selectedArtistDossier.registrationFeeUsd ?? artistRegistrationFeeUsd).toFixed(2)} USD
                   </p>
                 </div>
               </div>
@@ -9308,12 +9342,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => {
+                        const feeUsd = selectedArtistDossier.registrationFeeUsd ?? artistRegistrationFeeUsd;
+                        const feeHtg = selectedArtistDossier.registrationFeeHtg ?? Math.round(feeUsd * exchangeRate);
                         setProofModalInfo({
                           url: selectedArtistDossier.registrationProofUrl!,
-                          title: `Prèv Peman Frè Enskripsyon Atis ($4.99 USD • 723.55 HTG)`,
+                          title: `Prèv Peman Frè Enskripsyon Atis ($${feeUsd.toFixed(2)} USD • ${feeHtg.toLocaleString()} HTG)`,
                           donorOrArtistName: `${selectedArtistDossier.stageName} (${selectedArtistDossier.name})`,
                           phone: selectedArtistDossier.phone,
-                          amount: '$4.99 USD (~723.55 HTG)',
+                          amount: `$${feeUsd.toFixed(2)} USD (~${feeHtg.toLocaleString()} HTG)`,
                           musicTitle: `Enskripsyon Kont Atis • Vil: ${selectedArtistDossier.city}`,
                           date: selectedArtistDossier.registrationDate,
                           type: 'artist_fee'
@@ -9325,7 +9361,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     >
                       <img
                         src={selectedArtistDossier.registrationProofUrl}
-                        alt="Prèv $4.99"
+                        alt={`Prèv $${(selectedArtistDossier.registrationFeeUsd ?? artistRegistrationFeeUsd).toFixed(2)}`}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform"
                       />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -9339,8 +9375,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   )}
                   <div>
                     <h5 className="text-sm font-bold text-white flex items-center gap-2">
-                      <span>Frè Enskripsyon $4.99 USD</span>
-                      <span className="text-xs font-mono text-amber-300">~{Math.round(4.99 * exchangeRate).toLocaleString()} HTG</span>
+                      <span>Frè Enskripsyon ${(selectedArtistDossier.registrationFeeUsd ?? artistRegistrationFeeUsd).toFixed(2)} USD</span>
+                      <span className="text-xs font-mono text-amber-300">~{(selectedArtistDossier.registrationFeeHtg ?? Math.round((selectedArtistDossier.registrationFeeUsd ?? artistRegistrationFeeUsd) * exchangeRate)).toLocaleString()} HTG</span>
                     </h5>
                     <p className="text-xs text-slate-400">
                       Peman transfè sou MonCash / Natcash pou louvri kont atis la.
@@ -9352,12 +9388,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => {
+                      const feeUsd = selectedArtistDossier.registrationFeeUsd ?? artistRegistrationFeeUsd;
+                      const feeHtg = selectedArtistDossier.registrationFeeHtg ?? Math.round(feeUsd * exchangeRate);
                       setProofModalInfo({
                         url: selectedArtistDossier.registrationProofUrl!,
-                        title: `Prèv Peman Frè Enskripsyon Atis ($4.99 USD • 723.55 HTG)`,
+                        title: `Prèv Peman Frè Enskripsyon Atis ($${feeUsd.toFixed(2)} USD • ${feeHtg.toLocaleString()} HTG)`,
                         donorOrArtistName: `${selectedArtistDossier.stageName} (${selectedArtistDossier.name})`,
                         phone: selectedArtistDossier.phone,
-                        amount: '$4.99 USD (~723.55 HTG)',
+                        amount: `$${feeUsd.toFixed(2)} USD (~${feeHtg.toLocaleString()} HTG)`,
                         musicTitle: `Enskripsyon Kont Atis • Vil: ${selectedArtistDossier.city}`,
                         date: selectedArtistDossier.registrationDate,
                         type: 'artist_fee'
@@ -9566,7 +9604,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div>
                   <h3 className="text-base font-bold text-white">Ajoute Yon Nouvo Demand Enskripsyon Atis</h3>
                   <p className="text-xs text-slate-400">
-                    Mete tout enfòmasyon ak foto prèv $4.99 pou kreye dosye integrasyon an.
+                    Mete tout enfòmasyon ak foto prèv ${artistRegistrationFeeUsd.toFixed(2)} pou kreye dosye integrasyon an.
                   </p>
                 </div>
               </div>
@@ -9605,6 +9643,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   registrationProofUrl: manualArtistProof.trim() || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
                   status: manualArtistStatus,
                   registrationDate: new Date().toISOString().split('T')[0],
+                  registrationFeeUsd: artistRegistrationFeeUsd,
+                  registrationFeeHtg: Math.round(artistRegistrationFeeUsd * exchangeRate),
                   totalListens: 0,
                   totalDonationsReceived: 0,
                   instagramHandle: manualArtistInstagram.trim() || undefined,
@@ -9748,7 +9788,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-300 mb-1">URL Prèv Peman $4.99 oswa ID</label>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">URL Prèv Peman ${artistRegistrationFeeUsd.toFixed(2)} oswa ID</label>
                   <input
                     type="url"
                     value={manualArtistProof ?? ''}

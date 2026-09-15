@@ -48,6 +48,39 @@ import { ArtistStoryBar } from './components/ArtistStoryBar';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { FontSelectorModal, FONT_OPTIONS } from './components/FontSelectorModal';
 
+/**
+ * Fonksyon sekirize pou voye notifikasyon natif nan navigatè a (Browser Notification API)
+ * Alert atis yo menm si tab la an background oswa minimifye.
+ */
+const triggerBrowserNotification = (title: string, options?: NotificationOptions) => {
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+
+  const defaultOptions: NotificationOptions = {
+    icon: '/upmizik-logo.svg',
+    badge: '/upmizik-logo.svg',
+    ...options
+  };
+
+  try {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.ready
+        .then((registration) => {
+          registration.showNotification(title, defaultOptions);
+        })
+        .catch(() => {
+          new Notification(title, defaultOptions);
+        });
+    } else {
+      new Notification(title, defaultOptions);
+    }
+  } catch {
+    try {
+      new Notification(title, defaultOptions);
+    } catch {}
+  }
+};
+
 export default function App() {
   // Navigation & View state
   const [currentView, setCurrentView] = useState<ActiveView>('public');
@@ -375,15 +408,17 @@ export default function App() {
       setArchives([]);
     }
 
-    // Cloud Firestore Sync in background
+    // Cloud Firestore & MySQL Sync in background
     (async () => {
       try {
-        const [cloudMusic, cloudArtists, cloudPosts, cloudRpa, cloudPubs] = await Promise.all([
+        const [cloudMusic, cloudArtists, cloudDonations, cloudPosts, cloudRpa, cloudPubs, cloudSettings] = await Promise.all([
           HostingerService.fetchMusic(),
           HostingerService.fetchArtists(),
+          HostingerService.fetchDonations(),
           HostingerService.fetchSocialPosts(),
           HostingerService.fetchRpa(),
-          HostingerService.fetchPubs()
+          HostingerService.fetchPubs(),
+          HostingerService.fetchPaymentSettings()
         ]);
 
         if (cloudMusic && cloudMusic.length > 0) {
@@ -425,6 +460,37 @@ export default function App() {
           HostingerService.syncArtists(localArtists);
         }
 
+        if (cloudDonations && cloudDonations.length > 0) {
+          const activeAdmin = StorageService.getLoggedInAdmin();
+          if (activeAdmin && activeAdmin.role === 'super_admin') {
+            const currentLocal = StorageService.getDonations(activeAdmin);
+            const localMap = new Map(currentLocal.map(d => [d.id, d]));
+            const merged: DonationItem[] = [];
+            const processedIds = new Set<string>();
+
+            for (const cd of cloudDonations) {
+              const ld = localMap.get(cd.id);
+              if (ld) {
+                if (ld.status && ld.status !== 'pending' && cd.status === 'pending') {
+                  merged.push({ ...cd, ...ld, status: ld.status });
+                } else {
+                  merged.push({ ...cd, ...ld });
+                }
+              } else {
+                merged.push(cd);
+              }
+              processedIds.add(cd.id);
+            }
+            for (const ld of currentLocal) {
+              if (!processedIds.has(ld.id)) {
+                merged.push(ld);
+              }
+            }
+            setDonations(merged);
+            StorageService.saveDonations(merged);
+          }
+        }
+
         if (cloudPosts && cloudPosts.length > 0) {
           setSocialPosts(cloudPosts);
           StorageService.saveSocialPosts(cloudPosts);
@@ -440,6 +506,10 @@ export default function App() {
         if (cloudPubs && cloudPubs.length > 0) {
           setPubs(cloudPubs);
           StorageService.savePubs(cloudPubs);
+        }
+
+        if (cloudSettings && typeof cloudSettings === 'object' && Array.isArray(cloudSettings.methods)) {
+          StorageService.savePaymentSettings(cloudSettings, false);
         }
       } catch {
         // Hostinger VPS background sync deferred silently in local / sandboxed mode
@@ -587,8 +657,59 @@ export default function App() {
     const handleMusicValidated = (e: any) => {
       const detail = e.detail;
       if (detail && detail.song) {
-        if (currentArtist && (currentArtist.id === detail.song.artistId || currentArtist.stageName.toLowerCase() === detail.song.artistName.toLowerCase())) {
-          addToast('success', `🎉 Felisitasyon! Admin fenk valide moso mizik "${detail.song.title}" ou a!`);
+        const songTitle = detail.song.title;
+        const songArtistName = detail.song.artistName || 'Atis';
+        const isTargetArtist =
+          currentArtist &&
+          (currentArtist.id === detail.song.artistId ||
+            currentArtist.stageName.toLowerCase() === songArtistName.toLowerCase());
+
+        if (isTargetArtist) {
+          addToast('success', `🎉 Felisitasyon! Admin fenk valide moso mizik "${songTitle}" ou a!`);
+          triggerBrowserNotification(`🎉 Mizik Valide: "${songTitle}"`, {
+            body: `Felisitasyon ${currentArtist.stageName}! Admin fenk valide moso mizik "${songTitle}" ou a sou UpMizik.`,
+            tag: `music-validated-${detail.song.id}`
+          });
+        } else {
+          triggerBrowserNotification(`🎵 Nouvo Mizik Valide sou UpMizik`, {
+            body: `Moso mizik "${songTitle}" pa ${songArtistName} fenk valide epi pibliye!`,
+            tag: `music-validated-${detail.song.id}`
+          });
+        }
+      }
+    };
+
+    const handleArtistUpdated = (e: any) => {
+      const detail = e.detail;
+      if (detail && detail.artist && currentArtist && currentArtist.id === detail.artist.id) {
+        if (detail.status === 'active' || detail.action === 'validate') {
+          addToast('success', `🎉 Felisitasyon ${currentArtist.stageName}! Kont ou an fenk valide pa Admin!`);
+          triggerBrowserNotification(`🎉 Kont Ou Valide sou UpMizik!`, {
+            body: `Felisitasyon ${currentArtist.stageName}! Kont atis ou an valide avèk siksè.`,
+            tag: `artist-status-${detail.artist.id}`
+          });
+        } else if (detail.status === 'rejected' || detail.action === 'reject') {
+          addToast('error', `⚠️ Enskripsyon atis ou a pa te apwouve.`);
+          triggerBrowserNotification(`⚠️ Enskripsyon Pa Valide`, {
+            body: `Enskripsyon atis ou a pa te apwouve pa administratè a.`,
+            tag: `artist-status-${detail.artist.id}`
+          });
+        }
+      }
+    };
+
+    const handleDonationUpdated = (e: any) => {
+      const detail = e.detail;
+      if (detail && detail.donation && currentArtist && (detail.donation.artistId === currentArtist.id || detail.donation.artistName?.toLowerCase() === currentArtist.stageName.toLowerCase())) {
+        if (detail.action === 'validate' || detail.donation.status === 'validated' || detail.donation.status === 'completed') {
+          const amount = detail.donation.amount || 0;
+          const currency = detail.donation.currency || 'HTG';
+          const donor = detail.donation.donorName || 'Yon fanatik';
+          addToast('success', `💰 Ou resevwa yon nouvo sipò ${amount} ${currency} nan men ${donor}! Tcheke bwat lèt ou.`);
+          triggerBrowserNotification(`💰 Nouvo Sipò Resevwa!`, {
+            body: `${donor} voye yon sipò ${amount} ${currency} pou ou sou UpMizik!`,
+            tag: `donation-received-${detail.donation.id}`
+          });
         }
       }
     };
@@ -597,7 +718,9 @@ export default function App() {
     window.addEventListener('upmizik_data_sync', handleSync);
     window.addEventListener('upmizik_music_updated', handleSync);
     window.addEventListener('upmizik_artist_updated', handleSync);
+    window.addEventListener('upmizik_artist_updated', handleArtistUpdated);
     window.addEventListener('upmizik_donation_updated', handleSync);
+    window.addEventListener('upmizik_donation_updated', handleDonationUpdated);
     window.addEventListener('upmizik_music_validated', handleMusicValidated);
 
     return () => {
@@ -605,10 +728,21 @@ export default function App() {
       window.removeEventListener('upmizik_data_sync', handleSync);
       window.removeEventListener('upmizik_music_updated', handleSync);
       window.removeEventListener('upmizik_artist_updated', handleSync);
+      window.removeEventListener('upmizik_artist_updated', handleArtistUpdated);
       window.removeEventListener('upmizik_donation_updated', handleSync);
+      window.removeEventListener('upmizik_donation_updated', handleDonationUpdated);
       window.removeEventListener('upmizik_music_validated', handleMusicValidated);
     };
   }, [currentTrack, currentArtist, currentAdmin]);
+
+  // Mande pèmisyon pou Notification API nan navigatè a pou atis yo ka resevwa notifikasyon natif menm si tab la an background
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (currentArtist && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
+    }
+  }, [currentArtist]);
 
   // Pwoteksyon Espas Admin (admin_dashboard route guard):
   // Asire ke si yon admin pa konekte ak wòl 'super_admin', li otomatikman redirije sou 'public' san okenn done finansye pa chaje nan memwa.
@@ -1000,6 +1134,10 @@ export default function App() {
     setArchives(StorageService.getArchives(admin));
     setCurrentView('admin_dashboard');
     addToast('success', `Konekte kòm Administratè: ${admin.name}`, 'admin');
+    HostingerService.fetchArtistsAndNotify(true).catch(() => {});
+    HostingerService.fetchDonationsAndNotify(true).catch(() => {});
+    HostingerService.fetchMusicAndNotify(true).catch(() => {});
+    HostingerService.fetchPaymentSettingsAndNotify(true).catch(() => {});
   };
 
   const handleLogoutArtist = () => {
@@ -1188,6 +1326,23 @@ export default function App() {
         }
       })
     );
+
+    // Native browser push notification in addition to toast
+    if (result.artist) {
+      const artistStage = result.artist.stageName || result.artist.name;
+      const notifTitle = accept
+        ? `✅ Kont Atis Valide: ${artistStage}`
+        : `⚠️ Enskripsyon Atis Refize: ${artistStage}`;
+      const notifBody = accept
+        ? `Felisitasyon! Kont atis "${artistStage}" la valide avèk siksè sou UpMizik pa ${adminName}.`
+        : `Enskripsyon pou "${artistStage}" la pa valide. Rezon: ${reason || 'Foto prèv transfè a pa klè oswa referans lan pa kowenside.'}`;
+
+      triggerBrowserNotification(notifTitle, {
+        body: notifBody,
+        tag: `artist-validation-${artistId}`,
+        data: { artistId, status: newStatus }
+      });
+    }
 
     if (result.artist && result.generatedEmail) {
       if (accept) {

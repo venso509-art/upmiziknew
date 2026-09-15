@@ -5,13 +5,13 @@
  * Li sipòte telechajman fichye odyo (MP3) ak prèv dirèkteman nan dosye sèvè Hostinger a.
  */
 
-import { ArtistUser, MusicItem, DonationItem, ArtistInboxMessage, SocialPost, PubItem, RpaItem } from '../types';
+import { ArtistUser, MusicItem, DonationItem, ArtistInboxMessage, SocialPost, PubItem, RpaItem, PaymentSettingsConfig } from '../types';
 
 // API Base URL:
-// Backend PHP a ap kouri sou subdomain https://api.upmizik.com
+// Backend PHP a ap kouri sou subdomain https://api.upmizik.com oswa chemen relatif sou upmizik.com
 const API_BASE_URL = ((import.meta as unknown as { env?: Record<string, string> }).env?.VITE_PHP_API_URL as string) || 
   (typeof window !== 'undefined' && window.location.hostname.includes('upmizik.com')
-    ? 'https://api.upmizik.com/backend/api'
+    ? `${window.location.origin}/backend/api`
     : 'https://api.upmizik.com/backend/api');
 
 class ApiService {
@@ -91,7 +91,8 @@ class ApiService {
       const url = status ? `${this.baseUrl}/artists.php?status=${status}` : `${this.baseUrl}/artists.php`;
       const res = await fetch(url);
       const data = await res.json();
-      return data.success ? data.artists : [];
+      const list = data.artists || data.data?.artists;
+      return Array.isArray(list) ? list : [];
     } catch {
       return [];
     }
@@ -269,6 +270,25 @@ class ApiService {
   // DONASYON (DONATIONS)
   // ----------------------------------------------------------
 
+  public async getDonations(params?: { artistId?: string; musicId?: string; status?: string }): Promise<DonationItem[]> {
+    try {
+      let url = `${this.baseUrl}/donations.php`;
+      const queryParams: string[] = [];
+      if (params?.artistId) queryParams.push(`artistId=${encodeURIComponent(params.artistId)}`);
+      if (params?.musicId) queryParams.push(`musicId=${encodeURIComponent(params.musicId)}`);
+      if (params?.status) queryParams.push(`status=${encodeURIComponent(params.status)}`);
+      if (queryParams.length > 0) {
+        url += `?${queryParams.join('&')}`;
+      }
+      const res = await fetch(url);
+      const data = await res.json();
+      const list = data.donations || data.data?.donations;
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  }
+
   public async submitDonation(donation: Partial<DonationItem>): Promise<{ success: boolean; donationId?: string }> {
     try {
       const res = await fetch(`${this.baseUrl}/donations.php`, {
@@ -291,6 +311,39 @@ class ApiService {
       });
       const data = await res.json();
       return data.success;
+    } catch {
+      return false;
+    }
+  }
+
+  // ----------------------------------------------------------
+  // PARAMÈT PEMAN & NIMEWO (PAYMENT SETTINGS & MONCASH/NATCASH)
+  // ----------------------------------------------------------
+
+  public async getPaymentSettings(): Promise<PaymentSettingsConfig | null> {
+    try {
+      const res = await fetch(`${this.baseUrl}/settings.php`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data && data.success && data.settings && typeof data.settings === 'object') {
+        return data.settings as PaymentSettingsConfig;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  public async savePaymentSettings(config: PaymentSettingsConfig): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/settings.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: config }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      return !!data.success;
     } catch {
       return false;
     }

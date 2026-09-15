@@ -73,6 +73,8 @@ export interface ArtistUser {
   artistQuote?: string; // Yon fraz oswa deviz pèsonèl
   status: 'pending' | 'active' | 'rejected' | 'suspended';
   registrationProofUrl?: string;
+  registrationFeeUsd?: number; // Montan frè atis la te peye nan moman enskripsyon an
+  registrationFeeHtg?: number; // Ekivalan an Goud
   registrationRejectionReason?: string;
   registrationDate: string;
   totalListens: number;

@@ -55,6 +55,10 @@ try {
     $lastDonationCount = (int)($rowD['cnt'] ?? 0);
     $lastDonationMaxId = (string)($rowD['max_id'] ?? '');
     $lastDonationStatusHash = (string)($rowD['shash'] ?? '');
+
+    $stmtS = $pdo->query("SELECT date_mise_a_jour FROM configurations WHERE cle = 'payment_settings'");
+    $rowS = $stmtS ? $stmtS->fetch() : null;
+    $lastSettingsTimestamp = (string)($rowS['date_mise_a_jour'] ?? '');
 } catch (Exception $e) {
     // Si tab la vid oswa erè
 }
@@ -164,6 +168,22 @@ while ((time() - $startTime) < $maxDuration) {
             echo "data: " . json_encode([
                 'type' => 'donations_update',
                 'count' => $currDonCount,
+                'timestamp' => time()
+            ]) . "\n\n";
+            @flush();
+        }
+
+        // 4. Tcheke si gen mizajou sou paramèt peman oswa frè enskripsyon
+        $stmtS = $pdo->query("SELECT date_mise_a_jour FROM configurations WHERE cle = 'payment_settings'");
+        $rowS = $stmtS ? $stmtS->fetch() : null;
+        $currSettingsTimestamp = (string)($rowS['date_mise_a_jour'] ?? '');
+
+        if ($currSettingsTimestamp !== $lastSettingsTimestamp) {
+            $lastSettingsTimestamp = $currSettingsTimestamp;
+
+            echo "event: payment_settings_update\n";
+            echo "data: " . json_encode([
+                'type' => 'payment_settings_update',
                 'timestamp' => time()
             ]) . "\n\n";
             @flush();

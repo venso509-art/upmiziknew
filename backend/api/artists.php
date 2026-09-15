@@ -336,6 +336,29 @@ if ($method === 'PUT' || $method === 'PATCH') {
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
 
+    if ($stmt->rowCount() === 0) {
+        $check = $pdo->prepare("SELECT id FROM artistes WHERE id = ?");
+        $check->execute([$id]);
+        if (!$check->fetch()) {
+            $insName = trim($data['name'] ?? $data['stageName'] ?? 'Atis');
+            $insStage = trim($data['stageName'] ?? $data['name'] ?? 'Atis');
+            $insEmail = strtolower(trim($data['email'] ?? ($id . '@upmizik.com')));
+            $insPhone = trim($data['phone'] ?? '+509 0000 0000');
+            $insCity = $data['city'] ?? 'Pòtoprens';
+            $insPin = !empty($data['pin']) ? (strlen($data['pin']) === 60 ? $data['pin'] : password_hash($data['pin'], PASSWORD_BCRYPT, ['cost' => 10])) : password_hash('0000', PASSWORD_BCRYPT, ['cost' => 10]);
+            $insStatut = mapStatusToDb($data['status'] ?? 'en_attente');
+            $insProof = $data['registrationProofUrl'] ?? null;
+            $insAvatar = $data['avatarUrl'] ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80';
+            
+            $insStmt = $pdo->prepare("
+                INSERT INTO artistes (id, nom_complet, nom_scene, email, telephone, ville, pin, avatar_url, statut, preuve_inscription_url, date_inscription)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                ON DUPLICATE KEY UPDATE statut = VALUES(statut)
+            ");
+            $insStmt->execute([$id, $insName, $insStage, $insEmail, $insPhone, $insCity, $insPin, $insAvatar, $insStatut, $insProof]);
+        }
+    }
+
     jsonResponse([
         'success' => true,
         'message' => 'Pwofil atis la mete ajou avèk siksè!',
