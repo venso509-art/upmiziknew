@@ -215,6 +215,33 @@ if ($method === 'POST') {
     $donorName = $data['donorName'] ?? 'Fanatik Anonim';
     $donorPhone = $data['donorPhone'] ?? 'Non espesifye';
     $proofUrl = $data['proofUrl'] ?? '';
+    // Otomatikman konvèti prèv base64 soti sou telefòn pou l vin yon imaj fizik sou disk
+    if (strpos($proofUrl, 'data:image/') === 0) {
+        try {
+            $proofDir = dirname(__DIR__) . '/uploads/proofs';
+            if (!is_dir($proofDir)) {
+                @mkdir($proofDir, 0755, true);
+            }
+            if (preg_match('/^data:image\/(\w+);base64,/', $proofUrl, $type)) {
+                $rawBase64 = substr($proofUrl, strpos($proofUrl, ',') + 1);
+                $ext = strtolower($type[1]);
+                if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
+                    $ext = 'jpg';
+                }
+                $decoded = base64_decode($rawBase64);
+                if ($decoded !== false) {
+                    $fileName = 'don_proof_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                    $filePath = $proofDir . '/' . $fileName;
+                    if (@file_put_contents($filePath, $decoded)) {
+                        $proofUrl = '/backend/uploads/proofs/' . $fileName;
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            // Kontinye ak proofUrl aktyèl la si ekriti a pa mache
+        }
+    }
+
     $paymentMethod = $data['paymentMethod'] ?? 'MonCash';
     $status = mapStatusToDb($data['status'] ?? 'pending');
     $artistShare = (float)($data['artistShare'] ?? ($amount * 0.85));
@@ -226,7 +253,7 @@ if ($method === 'POST') {
         $checkArtist->execute([$artistId]);
         if (!$checkArtist->fetch()) {
             $insArtist = $pdo->prepare("
-                INSERT INTO artistes (id, nom_scene, nom_complet, email, telephone, ville, pin, statut, total_ecoutes, total_dons)
+                INSERT INTO artistes (id, nom_scene, nom_complet, email, telephone, ville, pin, statut, total_ecoutes, total_dons_recus)
                 VALUES (?, ?, ?, ?, 'N/A', 'Pòtoprens', '1234', 'actif', 0, 0)
                 ON DUPLICATE KEY UPDATE nom_scene = VALUES(nom_scene)
             ");

@@ -286,6 +286,52 @@ export function initializeStorage() {
   }
 }
 
+// Helper to deduplicate artist inbox messages by ID and semantic identity
+export const deduplicateInboxMessages = (messages: ArtistInboxMessage[]): ArtistInboxMessage[] => {
+  if (!Array.isArray(messages)) return [];
+  const seenIds = new Set<string>();
+  const seenKeys = new Set<string>();
+  const result: ArtistInboxMessage[] = [];
+
+  for (const m of messages) {
+    if (!m || !m.id) continue;
+    if (seenIds.has(m.id)) continue;
+
+    const cleanEmail = (m.recipientEmail || m.artistEmail || '').trim().toLowerCase();
+    const identityKey = cleanEmail || m.artistId || 'artist';
+
+    let semanticKey = '';
+    if (m.type === 'registration_received') {
+      semanticKey = `${identityKey}_reg_received`;
+    } else if (m.type === 'account_verified' || (m as any).type === 'verification') {
+      semanticKey = `${identityKey}_account_verified`;
+    } else if (m.type === 'account_rejected' || (m as any).type === 'rejection') {
+      semanticKey = `${identityKey}_account_rejected`;
+    } else if (m.type === 'donation_pending') {
+      const donId = m.donationDetails?.donationId || '';
+      semanticKey = `${identityKey}_don_pending_${donId || (m.donationDetails?.grossAmount + '_' + (m.donationDetails?.musicTitle || '').trim().toLowerCase())}`;
+    } else if (m.type === 'donation_received') {
+      const donId = m.donationDetails?.donationId || '';
+      semanticKey = `${identityKey}_don_received_${donId || (m.donationDetails?.grossAmount + '_' + (m.donationDetails?.musicTitle || '').trim().toLowerCase())}`;
+    } else if (m.type === 'music_validated') {
+      const musicId = m.musicDetails?.musicId || m.subject.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      semanticKey = `${identityKey}_music_validated_${musicId}`;
+    } else {
+      semanticKey = `${identityKey}_${m.type}_${(m.subject || '').trim().toLowerCase()}`;
+    }
+
+    if (seenKeys.has(semanticKey)) {
+      continue;
+    }
+
+    seenIds.add(m.id);
+    seenKeys.add(semanticKey);
+    result.push(m);
+  }
+
+  return result;
+};
+
 export const StorageService = {
   // HELPER: Find the next sequential position integer (e.g. 1, 2, ... N + 1)
   getNextAvailablePosition: (list?: MusicItem[], excludePositions: number[] = []): number => {
@@ -821,10 +867,40 @@ export const StorageService = {
       return updated;
     });
 
-    return enrichedList;
+    // Deduplicate by ID and email so artists never show up multiple times
+    const seenIds = new Set<string>();
+    const seenEmails = new Set<string>();
+    const deduplicated: ArtistUser[] = [];
+
+    for (const a of enrichedList) {
+      if (!a || !a.id) continue;
+      const cleanEmail = (a.email || '').trim().toLowerCase();
+      if (seenIds.has(a.id) || (cleanEmail && seenEmails.has(cleanEmail))) {
+        continue;
+      }
+      seenIds.add(a.id);
+      if (cleanEmail) seenEmails.add(cleanEmail);
+      deduplicated.push(a);
+    }
+
+    return deduplicated;
   },
   saveArtists: (list: ArtistUser[]) => {
-    setStoredData(KEYS.ARTISTS, list);
+    const seenIds = new Set<string>();
+    const seenEmails = new Set<string>();
+    const deduplicated: ArtistUser[] = [];
+    for (const a of list) {
+      if (!a || !a.id) continue;
+      const cleanEmail = (a.email || '').trim().toLowerCase();
+      if (seenIds.has(a.id) || (cleanEmail && seenEmails.has(cleanEmail))) {
+        continue;
+      }
+      seenIds.add(a.id);
+      if (cleanEmail) seenEmails.add(cleanEmail);
+      deduplicated.push(a);
+    }
+
+    setStoredData(KEYS.ARTISTS, deduplicated);
     try {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('upmizik_artist_updated', { detail: { action: 'batch' } }));
@@ -833,11 +909,16 @@ export const StorageService = {
   },
   saveArtist: (artist: ArtistUser) => {
     const current = StorageService.getArtists();
-    const existingIdx = current.findIndex(a => a.id === artist.id);
+    const cleanEmail = (artist.email || '').trim().toLowerCase();
+    const existingIdx = current.findIndex(a => 
+      a.id === artist.id || 
+      (cleanEmail && (a.email || '').trim().toLowerCase() === cleanEmail)
+    );
     let updated: ArtistUser[];
     if (existingIdx >= 0) {
       updated = [...current];
-      updated[existingIdx] = artist;
+      // Prezève id orijinal la si se menm imèl la pou evite chanje id
+      updated[existingIdx] = { ...current[existingIdx], ...artist, id: current[existingIdx].id };
     } else {
       updated = [artist, ...current];
     }
@@ -845,11 +926,11 @@ export const StorageService = {
 
     // If currently logged-in artist is this artist, update session storage too
     const currentLoggedIn = StorageService.getLoggedInArtist();
-    if (currentLoggedIn && currentLoggedIn.id === artist.id) {
-      StorageService.setCurrentArtist(artist);
+    if (currentLoggedIn && (currentLoggedIn.id === artist.id || (cleanEmail && (currentLoggedIn.email || '').toLowerCase() === cleanEmail))) {
+      StorageService.setCurrentArtist(existingIdx >= 0 ? updated[existingIdx] : artist);
     }
     
-    // If this is a newly registered artist pending validation, dispatch automated acknowledgement email
+    // If this is a newly registered artist pending validation, dispatch automated acknowledgement email ONLY ONCE
     if (existingIdx < 0 && (artist.status === 'pending' || !artist.status)) {
       try {
         StorageService.sendArtistRegistrationPendingEmail(artist);
@@ -861,7 +942,6 @@ export const StorageService = {
     try {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('upmizik_artist_updated', { detail: { action: 'save', artist } }));
-        window.dispatchEvent(new CustomEvent('upmizik_donation_updated', { detail: { action: 'artist_save', artist } }));
       }
     } catch {}
   },
@@ -1245,7 +1325,21 @@ export const StorageService = {
   setLoggedInArtist: (artist: ArtistUser | null) => setStoredData(KEYS.CURRENT_ARTIST, artist),
 
   // DONATIONS (Pwoteje pou itilizatè verifye kòm Admin sèlman)
-  getRawStoredDonations: (): DonationItem[] => getStoredData<DonationItem[]>(KEYS.DONATIONS, INITIAL_DONATIONS),
+  getRawStoredDonations: (): DonationItem[] => {
+    const raw = getStoredData<DonationItem[]>(KEYS.DONATIONS, INITIAL_DONATIONS);
+    const seen = new Set<string>();
+    const deduplicated: DonationItem[] = [];
+    for (const d of raw) {
+      if (!d || !d.id) continue;
+      if (seen.has(d.id)) continue;
+      seen.add(d.id);
+      deduplicated.push(d);
+    }
+    if (deduplicated.length !== raw.length) {
+      setStoredData(KEYS.DONATIONS, deduplicated);
+    }
+    return deduplicated;
+  },
   
   getDonations: (adminAuth?: AdminUser | null): DonationItem[] => {
     // Sekirite: Si moun nan pa gen wòl 'super_admin' verifye, pa voye done finansye yo
@@ -1256,16 +1350,48 @@ export const StorageService = {
     return StorageService.getRawStoredDonations();
   },
   
-  saveDonations: (list: DonationItem[]) => {
-    setStoredData(KEYS.DONATIONS, list);
-    try {
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('upmizik_donation_updated', { detail: { action: 'batch' } }));
-      }
-    } catch {}
+  saveDonations: (list: DonationItem[], skipEvent = false) => {
+    const seen = new Set<string>();
+    const deduplicated: DonationItem[] = [];
+    for (const d of list) {
+      if (!d || !d.id) continue;
+      if (seen.has(d.id)) continue;
+      seen.add(d.id);
+      deduplicated.push(d);
+    }
+    setStoredData(KEYS.DONATIONS, deduplicated);
+    if (!skipEvent) {
+      try {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('upmizik_donation_updated', { detail: { action: 'batch' } }));
+        }
+      } catch {}
+    }
   },
   
-  addDonation: (donation: Omit<DonationItem, 'id' | 'createdAt' | 'artistShare' | 'platformShare'>): DonationItem => {
+  addDonation: (donation: (Omit<DonationItem, 'id' | 'createdAt' | 'artistShare' | 'platformShare'> & { id?: string; createdAt?: string })): DonationItem => {
+    const currentList = StorageService.getRawStoredDonations();
+
+    // Check 1: If donation already has an id and is already in storage
+    if (donation.id) {
+      const existing = currentList.find(d => d.id === donation.id);
+      if (existing) {
+        return existing;
+      }
+    }
+
+    // Check 2: Prevent rapid duplicate submission of the exact same donation
+    const existingRecent = currentList.find(d => 
+      d.musicId === donation.musicId &&
+      d.artistName === donation.artistName &&
+      (d.donorName || '').trim().toLowerCase() === (donation.donorName || '').trim().toLowerCase() &&
+      Number(d.amount) === Number(donation.amount) &&
+      d.status === 'pending'
+    );
+    if (existingRecent) {
+      return existingRecent;
+    }
+
     const amount = Number(donation.amount);
     // Revenue split: 85% to artist, 15% + $0.99 to platform
     const artistShare = Number((amount * 0.85).toFixed(2));
@@ -1273,14 +1399,13 @@ export const StorageService = {
     
     const newDonation: DonationItem = {
       ...donation,
-      id: `don-${Date.now()}`,
-      createdAt: new Date().toLocaleString('ht-HT', { dateStyle: 'short', timeStyle: 'short' }),
+      id: donation.id || `don-${Date.now()}`,
+      createdAt: donation.createdAt || new Date().toLocaleString('ht-HT', { dateStyle: 'short', timeStyle: 'short' }),
       artistShare,
       platformShare
     };
 
-    const currentList = StorageService.getRawStoredDonations();
-    StorageService.saveDonations([newDonation, ...currentList]);
+    StorageService.saveDonations([newDonation, ...currentList], true);
 
     // AUTOMATED NOTIFICATION: Dispatch "New Financial Support Received (Pending Validation)" alert
     try {
@@ -2117,17 +2242,31 @@ export const StorageService = {
   },
 
   // ARTIST INBOX & AUTOMATED EMAIL NOTIFICATION SYSTEM
-  getArtistInboxMessages: (artistId?: string): ArtistInboxMessage[] => {
+  getArtistInboxMessages: (artistId?: string, artistEmail?: string): ArtistInboxMessage[] => {
     const all = getStoredData<ArtistInboxMessage[]>(KEYS.ARTIST_INBOX, INITIAL_ARTIST_INBOX);
-    if (!artistId) return all;
-    return all.filter(m => m.artistId === artistId);
+    const cleaned = deduplicateInboxMessages(all);
+    // If duplicates were detected in stored data, silently update storage to clean up historical duplicates
+    if (cleaned.length !== all.length) {
+      setStoredData(KEYS.ARTIST_INBOX, cleaned);
+    }
+    if (!artistId && !artistEmail) return cleaned;
+    const cleanTargetEmail = (artistEmail || '').trim().toLowerCase();
+    return cleaned.filter(m => {
+      if (artistId && m.artistId === artistId) return true;
+      if (cleanTargetEmail) {
+        const rEmail = (m.recipientEmail || m.artistEmail || '').trim().toLowerCase();
+        if (rEmail === cleanTargetEmail) return true;
+      }
+      return false;
+    });
   },
 
   saveArtistInboxMessages: (list: ArtistInboxMessage[]) => {
-    setStoredData(KEYS.ARTIST_INBOX, list);
+    const deduplicated = deduplicateInboxMessages(list);
+    setStoredData(KEYS.ARTIST_INBOX, deduplicated);
     try {
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('upmizik_inbox_updated', { detail: { messages: list } }));
+        window.dispatchEvent(new CustomEvent('upmizik_inbox_updated', { detail: { messages: deduplicated } }));
       }
     } catch {}
   },
@@ -2143,11 +2282,27 @@ export const StorageService = {
 
     const artists = StorageService.getArtists();
     const artistObj = artists.find(a => a.id === donation.artistId || a.stageName === donation.artistName);
+    const targetArtistId = donation.artistId || artistObj?.id || 'artist-1';
     const artistEmail = artistObj?.email || `${(donation.artistName || 'atis').toLowerCase().replace(/\s+/g, '')}@upmizik.com`;
+    const cleanTargetEmail = (artistEmail || '').trim().toLowerCase();
+
+    // Deduplication check: Do not send duplicate pending email for the same donation
+    const currentList = StorageService.getArtistInboxMessages();
+    const existing = currentList.find(m => 
+      (m.donationDetails?.donationId && m.donationDetails.donationId === donation.id) ||
+      (m.type === 'donation_pending' &&
+       (m.artistId === targetArtistId || (cleanTargetEmail && (m.recipientEmail || m.artistEmail || '').trim().toLowerCase() === cleanTargetEmail)) &&
+       m.donationDetails?.musicTitle === donation.musicTitle &&
+       m.donationDetails?.donorName === donation.donorName &&
+       m.donationDetails?.grossAmount === gross)
+    );
+    if (existing) {
+      return existing;
+    }
 
     const newEmail: ArtistInboxMessage = {
       id: `msg-don-pending-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      artistId: donation.artistId || artistObj?.id || 'artist-1',
+      artistId: targetArtistId,
       artistName: donation.artistName,
       artistEmail,
       type: 'donation_pending',
@@ -2197,13 +2352,23 @@ upmizik.com • notifications@upmizik.com`,
       }
     };
 
-    const currentList = StorageService.getArtistInboxMessages();
     StorageService.saveArtistInboxMessages([newEmail, ...currentList]);
     return newEmail;
   },
 
   // NOTIFICATION 2: Instant confirmation when an artist submits their registration & fee proof
   sendArtistRegistrationPendingEmail: (artist: ArtistUser): ArtistInboxMessage => {
+    // Deduplication check: Do not send duplicate pending registration email for same artist
+    const currentList = StorageService.getArtistInboxMessages();
+    const cleanEmail = (artist.email || '').trim().toLowerCase();
+    const existing = currentList.find(m => 
+      m.type === 'registration_received' &&
+      (m.artistId === artist.id || (cleanEmail && (m.recipientEmail || m.artistEmail || '').trim().toLowerCase() === cleanEmail))
+    );
+    if (existing) {
+      return existing;
+    }
+
     const nowTime = new Date().toLocaleString('ht-HT', {
       dateStyle: 'medium',
       timeStyle: 'short'
@@ -2254,7 +2419,6 @@ Ekip Validasyon UpMizik
 upmizik.com • admin.upmizik@gmail.com`
     };
 
-    const currentList = StorageService.getArtistInboxMessages();
     StorageService.saveArtistInboxMessages([newEmail, ...currentList]);
     return newEmail;
   },
@@ -2317,11 +2481,25 @@ upmizik.com • admin.upmizik@gmail.com`
     // Find artist object to get email or avatar
     const artists = StorageService.getArtists();
     const artistObj = artists.find(a => a.id === donation.artistId || a.stageName === donation.artistName);
+    const targetArtistId = donation.artistId || artistObj?.id || 'artist-1';
     const artistEmail = artistObj?.email || `${(donation.artistName || 'atis').toLowerCase().replace(/\s+/g, '')}@upmizik.com`;
+
+    // Deduplication check: Do not send duplicate validated donation email
+    const currentList = StorageService.getArtistInboxMessages();
+    const existing = currentList.find(m => 
+      m.type === 'donation_received' &&
+      ((m.donationDetails?.donationId && m.donationDetails.donationId === donation.id) ||
+       (m.artistId === targetArtistId &&
+        m.donationDetails?.musicTitle === donation.musicTitle &&
+        m.donationDetails?.grossAmount === gross))
+    );
+    if (existing) {
+      return existing;
+    }
 
     const newEmail: ArtistInboxMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      artistId: donation.artistId || artistObj?.id || 'artist-1',
+      artistId: targetArtistId,
       artistName: donation.artistName,
       artistEmail,
       type: 'donation_received',
@@ -2374,12 +2552,20 @@ Sèvè Notifikasyon: upmizik.com • admin.upmizik@gmail.com`,
       }
     };
 
-    const currentList = StorageService.getArtistInboxMessages();
     StorageService.saveArtistInboxMessages([newEmail, ...currentList]);
     return newEmail;
   },
 
   sendArtistAccountVerificationEmail: (artist: ArtistUser, adminName = 'Mr Clauvens'): ArtistInboxMessage => {
+    // Deduplication check: Do not send duplicate verification email for same artist
+    const currentList = StorageService.getArtistInboxMessages();
+    const existing = currentList.find(m => 
+      m.artistId === artist.id && (m.type === 'account_verified' || (m as any).type === 'verification')
+    );
+    if (existing) {
+      return existing;
+    }
+
     const nowTime = new Date().toLocaleString('ht-HT', {
       dateStyle: 'medium',
       timeStyle: 'short'
@@ -2433,7 +2619,6 @@ Ekip Administrasyon UpMizik
 upmizik.com | admin.upmizik@gmail.com | upmizik@gmail.com`
     };
 
-    const currentList = StorageService.getArtistInboxMessages();
     StorageService.saveArtistInboxMessages([newEmail, ...currentList]);
     return newEmail;
   },
@@ -2892,17 +3077,27 @@ upmizik.com | admin.upmizik@gmail.com`
   },
 
   sendArtistMusicValidatedEmail: (song: MusicItem, adminName = 'Mr Clauvens'): ArtistInboxMessage => {
-    const nowTime = new Date().toLocaleString('ht-HT', {
-      dateStyle: 'medium',
-      timeStyle: 'short'
-    });
-
     const artists = StorageService.getArtists();
     const artistObj = artists.find(
       a => a.id === song.artistId || a.stageName.toLowerCase() === song.artistName.toLowerCase()
     );
     const artistEmail = artistObj?.email || `${song.artistName.toLowerCase().replace(/\s+/g, '')}@upmizik.com`;
     const targetArtistId = song.artistId || artistObj?.id || 'artist-1';
+
+    // Deduplication check: Do not send duplicate music validated email for the same song
+    const currentList = StorageService.getArtistInboxMessages();
+    const existing = currentList.find(m => 
+      m.type === 'music_validated' && 
+      (m.musicDetails?.musicId === song.id || (m.artistId === targetArtistId && m.subject.includes(song.title)))
+    );
+    if (existing) {
+      return existing;
+    }
+
+    const nowTime = new Date().toLocaleString('ht-HT', {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
 
     const newEmail: ArtistInboxMessage = {
       id: `msg-song-val-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -2954,7 +3149,6 @@ upmizik.com • admin.upmizik@gmail.com`,
       }
     };
 
-    const currentList = StorageService.getArtistInboxMessages();
     StorageService.saveArtistInboxMessages([newEmail, ...currentList]);
     return newEmail;
   },

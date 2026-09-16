@@ -389,14 +389,15 @@ export const SupportModal: React.FC<SupportModalProps> = ({
         platformShare: parseFloat((currentAmountNumber * 0.15).toFixed(2))
       };
 
-      // Save immediately to local storage & Firestore
-      StorageService.addDonation(newDonationItem);
-      HostingerService.saveSingleDonation(newDonationItem);
-
+      // Save via callback or fallback directly if standalone
       if (typeof onConfirmSupport === 'function') {
         onConfirmSupport(newDonationItem);
-      } else if (typeof onSubmitDonation === 'function') {
-        onSubmitDonation(donationData);
+      } else {
+        StorageService.addDonation(newDonationItem);
+        HostingerService.saveSingleDonation(newDonationItem);
+        if (typeof onSubmitDonation === 'function') {
+          onSubmitDonation(donationData);
+        }
       }
 
       // Save summary and activate thank-you screen

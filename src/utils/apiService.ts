@@ -8,11 +8,20 @@
 import { ArtistUser, MusicItem, DonationItem, ArtistInboxMessage, SocialPost, PubItem, RpaItem, PaymentSettingsConfig } from '../types';
 
 // API Base URL:
-// Backend PHP a ap kouri sou subdomain https://api.upmizik.com oswa chemen relatif sou upmizik.com
-const API_BASE_URL = ((import.meta as unknown as { env?: Record<string, string> }).env?.VITE_PHP_API_URL as string) || 
-  (typeof window !== 'undefined' && window.location.hostname.includes('upmizik.com')
-    ? `${window.location.origin}/backend/api`
-    : 'https://api.upmizik.com/backend/api');
+// Sèvi ak chemen relatif /backend/api lè n ap kouri sou upmizik.com, sou IP VPS la, oswa localhost.
+const getInitialApiBaseUrl = (): string => {
+  const envUrl = ((import.meta as unknown as { env?: Record<string, string> }).env?.VITE_PHP_API_URL as string);
+  if (envUrl) return envUrl;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host.includes('upmizik.com') || host.includes('2.25.132.44') || host === 'localhost' || host === '127.0.0.1') {
+      return `${window.location.origin}/backend/api`;
+    }
+  }
+  return 'https://upmizik.com/backend/api';
+};
+
+const API_BASE_URL = getInitialApiBaseUrl();
 
 class ApiService {
   private baseUrl: string = API_BASE_URL;
@@ -325,8 +334,11 @@ class ApiService {
       const res = await fetch(`${this.baseUrl}/settings.php`);
       if (!res.ok) return null;
       const data = await res.json();
-      if (data && data.success && data.settings && typeof data.settings === 'object') {
-        return data.settings as PaymentSettingsConfig;
+      if (data && data.success) {
+        const cfg = data.settings || data.data?.settings || data.data;
+        if (cfg && typeof cfg === 'object' && Array.isArray(cfg.methods)) {
+          return cfg as PaymentSettingsConfig;
+        }
       }
       return null;
     } catch {

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ArtistUser, ArtistInboxMessage, MusicItem } from '../types';
-import { StorageService } from '../utils/storage';
+import { StorageService, deduplicateInboxMessages } from '../utils/storage';
 import {
   Mail,
   MailOpen,
@@ -61,9 +61,14 @@ export const ArtistInbox: React.FC<ArtistInboxProps> = ({
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [copiedTx, setCopiedTx] = useState(false);
 
+  // Guarantee clean deduplicated messages
+  const cleanMessages = useMemo(() => {
+    return deduplicateInboxMessages(messages);
+  }, [messages]);
+
   // Filter and search messages
   const filteredMessages = useMemo(() => {
-    return messages.filter((msg) => {
+    return cleanMessages.filter((msg) => {
       // Tab filter
       if (activeFilter === 'unread' && msg.isRead) return false;
       if (activeFilter === 'donations' && msg.type !== 'donation_received' && msg.type !== 'donation_pending') return false;
@@ -80,22 +85,22 @@ export const ArtistInbox: React.FC<ArtistInboxProps> = ({
         (msg.donationDetails?.musicTitle && msg.donationDetails.musicTitle.toLowerCase().includes(q))
       );
     });
-  }, [messages, activeFilter, searchQuery]);
+  }, [cleanMessages, activeFilter, searchQuery]);
 
   const selectedMessage = useMemo(() => {
     if (!selectedMessageId) return null;
-    return messages.find((m) => m.id === selectedMessageId) || null;
-  }, [messages, selectedMessageId]);
+    return cleanMessages.find((m) => m.id === selectedMessageId) || null;
+  }, [cleanMessages, selectedMessageId]);
 
   const unreadCount = useMemo(() => {
-    return messages.filter((m) => !m.isRead).length;
-  }, [messages]);
+    return cleanMessages.filter((m) => !m.isRead).length;
+  }, [cleanMessages]);
 
   const handleSelectMessage = (msg: ArtistInboxMessage) => {
     setSelectedMessageId(msg.id);
     if (!msg.isRead) {
       StorageService.markArtistMessageAsRead(msg.id);
-      const updated = messages.map((m) => (m.id === msg.id ? { ...m, isRead: true } : m));
+      const updated = cleanMessages.map((m) => (m.id === msg.id ? { ...m, isRead: true } : m));
       onMessagesUpdated(updated);
     }
   };

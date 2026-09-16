@@ -596,6 +596,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const knownDonationIdsRef = React.useRef<Set<string>>(new Set());
   const knownArtistIdsRef = React.useRef<Set<string>>(new Set());
+  const alertedDonationTimestampsRef = React.useRef<Map<string, number>>(new Map());
+  const alertedArtistTimestampsRef = React.useRef<Map<string, number>>(new Map());
   const isInitialMountRef = React.useRef<boolean>(true);
 
   const dismissLiveToast = (toastId: string) => {
@@ -612,6 +614,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       clearAllLiveNotifications();
       return;
     }
+
+    // Strict Anti-Duplicate: Pa janm voye plis pase 1 notifikasyon pou menm don an nan yon espas 45 segonn
+    const donKey = don.id || `${don.artistId || don.artistName || 'don'}_${don.amount}_${don.donorPhone || ''}`;
+    const lastAlertTime = alertedDonationTimestampsRef.current.get(donKey) || 0;
+    if (Date.now() - lastAlertTime < 45000) {
+      return;
+    }
+    alertedDonationTimestampsRef.current.set(donKey, Date.now());
 
     const alertId = `alert_don_${don.id}_${Date.now()}`;
     const newToastItem: LiveDonationAlertItem = {
@@ -650,6 +660,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       clearAllLiveNotifications();
       return;
     }
+
+    // Strict Anti-Duplicate: Pa janm voye plis pase 1 notifikasyon pou menm atis la nan yon espas 45 segonn
+    const artKey = art.id || (art.email || '').toLowerCase();
+    const lastAlertTime = alertedArtistTimestampsRef.current.get(artKey) || 0;
+    if (Date.now() - lastAlertTime < 45000) {
+      return;
+    }
+    alertedArtistTimestampsRef.current.set(artKey, Date.now());
 
     const alertId = `alert_art_${art.id}_${Date.now()}`;
     const newToastItem: LiveArtistAlertItem = {

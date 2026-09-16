@@ -752,8 +752,12 @@ class HostingerSyncService {
   // ==========================================
   async saveInboxMessage(msg: ArtistInboxMessage) {
     try {
-      const currentList = StorageService.getArtistInboxMessages(msg.artistId);
-      StorageService.saveArtistInboxMessages([msg, ...currentList]);
+      if (!msg || !msg.id) return;
+      const allMessages = StorageService.getArtistInboxMessages();
+      const alreadyExists = allMessages.some(m => m.id === msg.id);
+      if (!alreadyExists) {
+        StorageService.saveArtistInboxMessages([msg, ...allMessages]);
+      }
       this.emitChange('inbox', msg);
     } catch (e) {
       console.warn('[HostingerService] saveInboxMessage warn:', e);

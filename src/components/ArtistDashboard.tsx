@@ -146,7 +146,7 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
   const [pdfSuccessMessage, setPdfSuccessMessage] = useState<string | null>(null);
   const [currentBannerUrl, setCurrentBannerUrl] = useState<string>(currentArtist.headerBannerUrl || '');
   const [inboxMessages, setInboxMessages] = useState<ArtistInboxMessage[]>(() =>
-    StorageService.getArtistInboxMessages(currentArtist.id)
+    StorageService.getArtistInboxMessages(currentArtist.id, currentArtist.email)
   );
 
   // Validation / Suspension Blocking Dialog State
@@ -208,10 +208,20 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
     setEditAvatarPreview(currentArtist.avatarUrl || '');
   }, [currentArtist]);
 
-  // Sync inbox messages periodically or when storage updates
+  // Sync inbox messages periodically or when storage/inbox updates
   useEffect(() => {
-    setInboxMessages(StorageService.getArtistInboxMessages(currentArtist.id));
-  }, [currentArtist.id]);
+    const refreshInbox = () => {
+      setInboxMessages(StorageService.getArtistInboxMessages(currentArtist.id, currentArtist.email));
+    };
+    refreshInbox();
+
+    window.addEventListener('upmizik_inbox_updated', refreshInbox);
+    window.addEventListener('storage', refreshInbox);
+    return () => {
+      window.removeEventListener('upmizik_inbox_updated', refreshInbox);
+      window.removeEventListener('storage', refreshInbox);
+    };
+  }, [currentArtist.id, currentArtist.email]);
 
   const unreadInboxCount = inboxMessages.filter(m => !m.isRead).length;
 

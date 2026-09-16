@@ -213,12 +213,63 @@ if ($method === 'POST') {
     $city = $data['city'] ?? 'Pòtoprens';
     $pin = !empty($data['pin']) ? (strlen($data['pin']) === 60 ? $data['pin'] : password_hash($data['pin'], PASSWORD_BCRYPT, ['cost' => 10])) : password_hash('0000', PASSWORD_BCRYPT, ['cost' => 10]);
     $avatarUrl = $data['avatarUrl'] ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80';
+    $registrationProofUrl = $data['registrationProofUrl'] ?? null;
+
+    // Otomatikman konvèti prèv enskripsyon base64 soti sou telefòn pou l vin yon fichye fizik
+    if ($registrationProofUrl && strpos($registrationProofUrl, 'data:image/') === 0) {
+        try {
+            $proofDir = dirname(__DIR__) . '/uploads/proofs';
+            if (!is_dir($proofDir)) {
+                @mkdir($proofDir, 0755, true);
+            }
+            if (preg_match('/^data:image\/(\w+);base64,/', $registrationProofUrl, $type)) {
+                $rawBase64 = substr($registrationProofUrl, strpos($registrationProofUrl, ',') + 1);
+                $ext = strtolower($type[1]);
+                if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
+                    $ext = 'jpg';
+                }
+                $decoded = base64_decode($rawBase64);
+                if ($decoded !== false) {
+                    $fileName = 'reg_proof_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                    $filePath = $proofDir . '/' . $fileName;
+                    if (@file_put_contents($filePath, $decoded)) {
+                        $registrationProofUrl = '/backend/uploads/proofs/' . $fileName;
+                    }
+                }
+            }
+        } catch (Throwable $e) {}
+    }
+
+    // Otomatikman konvèti avatar base64 soti sou telefòn
+    if ($avatarUrl && strpos($avatarUrl, 'data:image/') === 0) {
+        try {
+            $avatarDir = dirname(__DIR__) . '/uploads/avatars';
+            if (!is_dir($avatarDir)) {
+                @mkdir($avatarDir, 0755, true);
+            }
+            if (preg_match('/^data:image\/(\w+);base64,/', $avatarUrl, $type)) {
+                $rawBase64 = substr($avatarUrl, strpos($avatarUrl, ',') + 1);
+                $ext = strtolower($type[1]);
+                if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
+                    $ext = 'jpg';
+                }
+                $decoded = base64_decode($rawBase64);
+                if ($decoded !== false) {
+                    $fileName = 'avatar_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                    $filePath = $avatarDir . '/' . $fileName;
+                    if (@file_put_contents($filePath, $decoded)) {
+                        $avatarUrl = '/backend/uploads/avatars/' . $fileName;
+                    }
+                }
+            }
+        } catch (Throwable $e) {}
+    }
+
     $bio = $data['bio'] ?? null;
     $musicalRoots = $data['musicalRoots'] ?? null;
     $musicalInfluences = $data['musicalInfluences'] ?? null;
     $artisticVision = $data['artisticVision'] ?? null;
     $status = mapStatusToDb($data['status'] ?? 'pending');
-    $registrationProofUrl = $data['registrationProofUrl'] ?? null;
     $youtubeUrl = $data['youtubeUrl'] ?? null;
     $instagramUrl = $data['instagramUrl'] ?? null;
     $tiktokUrl = $data['tiktokUrl'] ?? null;

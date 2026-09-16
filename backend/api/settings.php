@@ -39,6 +39,7 @@ if ($method === 'GET') {
                 $settings['updatedAt'] = $row['date_mise_a_jour'];
                 jsonResponse([
                     'success' => true,
+                    'data' => $settings,
                     'settings' => $settings,
                     'source' => 'mysql',
                     'updatedAt' => $row['date_mise_a_jour']
@@ -49,6 +50,7 @@ if ($method === 'GET') {
         // Si pa genyen nan baz done a ankò, voye null pou kliyan an itilize default
         jsonResponse([
             'success' => true,
+            'data' => null,
             'settings' => null,
             'message' => 'Pa gen konfigirasyon espesifik ki anrejistre nan baz done a ankò.'
         ]);

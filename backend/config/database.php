@@ -40,33 +40,80 @@ if (!function_exists('getDBConnection')) {
             return $pdo;
         }
 
-        try {
-            $dsn = "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4";
-            $options = [
-                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES   => false,
-                PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
-            ];
+        $hostsToTry = array_unique(array_filter([
+            DB_HOST,
+            'db',
+            'upmizik-db',
+            'mysql',
+            '127.0.0.1',
+            'localhost'
+        ]));
 
-            $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
-            return $pdo;
-        } catch (PDOException $e) {
+        $lastException = null;
+        $connectedHost = null;
+
+        $options = [
+            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES   => false,
+            PDO::ATTR_TIMEOUT            => 4,
+            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
+        ];
+
+        foreach ($hostsToTry as $candidateHost) {
+            try {
+                $dsn = "mysql:host=" . $candidateHost . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4";
+                $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+                $connectedHost = $candidateHost;
+                break;
+            } catch (PDOException $e) {
+                $lastException = $e;
+            }
+        }
+
+        if (!$pdo && $lastException) {
             http_response_code(500);
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode([
                 'success' => false,
-                'message' => 'Erè koneksyon ak baz done MySQL (' . DB_HOST . ':' . DB_PORT . '): ' . $e->getMessage(),
+                'message' => 'Erè koneksyon ak baz done MySQL: ' . $lastException->getMessage(),
                 'data' => [
-                    'host' => DB_HOST,
+                    'tried_hosts' => $hostsToTry,
                     'port' => DB_PORT,
                     'database' => DB_NAME,
                     'user' => DB_USER
                 ],
-                'errors' => [$e->getMessage()]
+                'errors' => [$lastException->getMessage()]
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             exit();
         }
+
+        // Silent schema resilience: Asire kolòn imaj ak prèv yo se LONGTEXT (pou evite erè 'Data too long' sou telefòn)
+        try {
+            $pdo->exec("
+                ALTER TABLE `artistes` 
+                MODIFY COLUMN `preuve_inscription_url` LONGTEXT NULL,
+                MODIFY COLUMN `avatar_url` LONGTEXT NULL,
+                MODIFY COLUMN `banniere_url` LONGTEXT NULL;
+            ");
+        } catch (Throwable $ignore) {}
+
+        try {
+            $pdo->exec("
+                ALTER TABLE `dons` 
+                MODIFY COLUMN `preuve_url` LONGTEXT NULL;
+            ");
+        } catch (Throwable $ignore) {}
+
+        try {
+            $pdo->exec("
+                ALTER TABLE `musiques` 
+                MODIFY COLUMN `cover_url` LONGTEXT NULL,
+                MODIFY COLUMN `audio_url` LONGTEXT NULL;
+            ");
+        } catch (Throwable $ignore) {}
+
+        return $pdo;
     }
 }
 

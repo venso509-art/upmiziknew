@@ -51,6 +51,30 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
   const [step, setStep] = useState<
     'form' | 'welcome_letter' | 'proof_upload' | 'registered_pending_notice' | 'login_pending_notice' | 'login_rejected_notice'
   >('form');
+  const [isFetchingFee, setIsFetchingFee] = useState(false);
+
+  // Chaje pri enskripsyon dinamik an tan reyèl soti nan sèvè a
+  useEffect(() => {
+    let isMounted = true;
+    const fetchDynamicServerFee = async () => {
+      try {
+        setIsFetchingFee(true);
+        const serverSettings = await UpMizikAPI.getPaymentSettings();
+        if (isMounted && serverSettings && typeof serverSettings === 'object' && Array.isArray(serverSettings.methods)) {
+          setPaymentConfig(serverSettings);
+          StorageService.savePaymentSettings(serverSettings, false);
+        }
+      } catch (err) {
+        console.warn('Pa ka chaje frè an tan reyèl soti nan sèvè a:', err);
+      } finally {
+        if (isMounted) setIsFetchingFee(false);
+      }
+    };
+    fetchDynamicServerFee();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const handleUpdate = (e: Event) => {
@@ -349,11 +373,47 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
       }
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPhoneDigits = phone.trim().replace(/\D/g, '');
+    const currentArtists = StorageService.getArtists();
+    const existingArtist = currentArtists.find(a => 
+      (a.email && a.email.trim().toLowerCase() === cleanEmail) ||
+      (cleanPhoneDigits && (a.phone || '').replace(/\D/g, '') === cleanPhoneDigits)
+    );
+
+    if (existingArtist) {
+      if (existingArtist.status === 'active') {
+        setErrorMsg('Gen yon kont atis ki deja aktif ak imèl oswa nimewo telefòn sa a. Tanpri klike sou tab "2. Konekte ak Kont Ou" pou w konekte.');
+        return;
+      } else if (existingArtist.status === 'pending') {
+        // Atis la te soumèt deja men li an atant: mete ajou objè a san kreye doublon
+        const reusedArtistObj: ArtistUser = {
+          ...existingArtist,
+          name: name.trim(),
+          stageName: stageName.trim(),
+          phone: phone.trim(),
+          city: city.trim(),
+          pin: cleanPin,
+          avatarUrl: avatarPreview || existingArtist.avatarUrl,
+          bio: bio.trim() || existingArtist.bio,
+          musicalRoots: musicalRoots.trim() || existingArtist.musicalRoots,
+          musicalInfluences: musicalInfluences.trim() || existingArtist.musicalInfluences,
+          artisticVision: artisticVision.trim() || existingArtist.artisticVision,
+          artistQuote: artistQuote.trim() || existingArtist.artistQuote,
+          registrationFeeUsd: regFeeUsd,
+          registrationFeeHtg: regFeeHtg
+        };
+        setTempArtist(reusedArtistObj);
+        setStep('welcome_letter');
+        return;
+      }
+    }
+
     const newArtistObj: ArtistUser = {
       id: `artist-${Date.now()}`,
       name: name.trim(),
       stageName: stageName.trim(),
-      email: email.trim().toLowerCase(),
+      email: cleanEmail,
       phone: phone.trim(),
       city: city.trim(),
       pin: cleanPin,
@@ -375,12 +435,8 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
       totalDonationsReceived: 0
     };
 
-    // Save immediately to storage and firestore so admin sees the pending registration right away
-    StorageService.saveArtist(newArtistObj);
-    HostingerService.saveSingleArtist(newArtistObj);
-    onRegisterArtist(newArtistObj);
+    // Prepare temp artist and advance to Welcome Letter (only registered to database once proof is attached)
     setTempArtist(newArtistObj);
-    // Transition to Welcome Letter explaining 85% revenue rule
     setStep('welcome_letter');
   };
 
@@ -400,8 +456,6 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
           registrationProofUrl: proofPreview,
           status: 'pending'
         };
-        StorageService.saveArtist(finalArtist);
-        HostingerService.saveSingleArtist(finalArtist);
         onRegisterArtist(finalArtist);
         setTempArtist(finalArtist);
         setStep('registered_pending_notice');
@@ -426,8 +480,6 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
           status: 'pending',
           registrationRejectionReason: undefined
         };
-        StorageService.saveArtist(updatedArtist);
-        HostingerService.saveSingleArtist(updatedArtist);
         onRegisterArtist(updatedArtist);
         setTempArtist(updatedArtist);
         setStep('registered_pending_notice');

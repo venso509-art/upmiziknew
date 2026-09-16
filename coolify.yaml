@@ -83,11 +83,11 @@ proxy:
   caddy:
     custom_config: |
       upmizik.com, www.upmizik.com {
-          # Proxy demann API PHP ak fichye uploads nan container backend la
-          handle_path /backend/api/* {
+          # Proxy demann API PHP ak fichye uploads nan container backend la (prezève chemen /backend/...)
+          handle /backend/* {
               reverse_proxy backend:80
           }
-          handle_path /backend/uploads/* {
+          handle /api.php* {
               reverse_proxy backend:80
           }
           # Tout lòt wout SPA yo ale nan container frontend la
