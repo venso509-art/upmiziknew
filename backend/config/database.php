@@ -6,11 +6,11 @@
 require_once __DIR__ . '/env.php';
 
 // Detekte ak sipòte tout fòm varyab anviwònman Coolify, Docker ak Hostinger
-$rawHost = env('DB_HOST') ?: env('MYSQL_HOST') ?: env('MYSQL_URL_HOST');
+$rawHost = env('DB_HOST') ?: env('MYSQL_HOST') ?: env('DB_URL_HOST') ?: 'upmizik-db';
 $rawPort = env('DB_PORT') ?: env('MYSQL_PORT') ?: '3306';
-$rawName = env('DB_NAME') ?: env('MYSQL_DATABASE') ?: env('DB_DATABASE') ?: 'upmizik_db';
-$rawUser = env('DB_USER') ?: env('MYSQL_USER') ?: 'upmizik_user';
-$rawPass = env('DB_PASS') ?: env('MYSQL_PASSWORD') ?: env('DB_PASSWORD') ?: 'upmizik_secure_pass_2026';
+$rawName = env('DB_NAME') ?: env('MYSQL_DATABASE') ?: env('DB_DATABASE') ?: 'upmiziknew';
+$rawUser = env('DB_USER') ?: env('MYSQL_USER') ?: 'upmizikuser';
+$rawPass = env('DB_PASS') ?: env('MYSQL_PASSWORD') ?: env('DB_PASSWORD') ?: 'WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs';
 
 // Parse DATABASE_URL si Coolify bay yon URL konplè tankou: mysql://user:pass@host:port/dbname
 $dbUrl = env('DATABASE_URL') ?: env('MYSQL_URL');
@@ -23,7 +23,7 @@ if ($dbUrl && ($parsed = parse_url($dbUrl))) {
 }
 
 if (!$rawHost) {
-    $rawHost = file_exists('/.dockerenv') ? 'db' : 'localhost';
+    $rawHost = file_exists('/.dockerenv') ? 'upmizik-db' : 'localhost';
 }
 
 define('DB_HOST', $rawHost);
