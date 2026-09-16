@@ -11,10 +11,10 @@ if (session_status() === PHP_SESSION_NONE) {
 // KONFIGIRASYON BAZ DONE MYSQL SOU HOSTINGER
 // ----------------------------------------------------------
 // Ranplase enfòmasyon sa yo ak sa ou kreye nan Hostinger hPanel > Databases
-define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
-define('DB_NAME', getenv('DB_NAME') ?: '');
-define('DB_USER', getenv('DB_USER') ?: '');
-define('DB_PASS', getenv('DB_PASS') ?: '');
+define('DB_HOST', getenv('DB_HOST') ?: 'upmizik-db');
+define('DB_NAME', getenv('DB_NAME') ?: 'upmiziknew');
+define('DB_USER', getenv('DB_USER') ?: 'upmizikuser');
+define('DB_PASS', getenv('DB_PASS') ?: 'WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs');
 
 // URL Sit la sou Hostinger (egz: https://upmizik.com)
 define('SITE_URL', getenv('SITE_URL') ?: ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . ($_SERVER['HTTP_HOST'] ?? 'localhost')));
