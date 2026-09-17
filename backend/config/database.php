@@ -164,6 +164,15 @@ if (!function_exists('getDBConnection')) {
         ];
 
         foreach ($hostsToTry as $candidateHost) {
+            // Tcheke rapidman si pò 3306 la ouvè avèk stream_socket_client (max 0.8s) pou anpeche 504 Gateway Timeout
+            $targetPort = defined('DB_PORT') ? DB_PORT : 3306;
+            $probe = @stream_socket_client("tcp://{$candidateHost}:{$targetPort}", $probeErrno, $probeErrstr, 0.8);
+            if (!$probe) {
+                // Host sa a pa reponn sou pò 3306, pa pèdi tan sou li
+                continue;
+            }
+            fclose($probe);
+
             foreach ($credentialsToTry as $cred) {
                 foreach ($databasesToTry as $candidateDb) {
                     try {
