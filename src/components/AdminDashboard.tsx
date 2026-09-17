@@ -107,6 +107,7 @@ import { IdbStorage } from '../utils/idbStorage';
 import { getAudioDuration } from '../utils/audioEngine';
 import { StorageService } from '../utils/storage';
 import { HostingerService } from '../utils/hostingerService';
+import { UpMizikAPI } from '../utils/apiService';
 import { SongCreditsEditor } from './SongCreditsEditor';
 import { SongCreditsModal } from './SongCreditsModal';
 import { ArtistRejectionModal } from './ArtistRejectionModal';
@@ -7033,6 +7034,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           if (compressed) {
                             setMusicCoverUrl(compressed);
                           }
+                          const upRes = await UpMizikAPI.uploadFile(file, 'covers');
+                          if (upRes && upRes.success && upRes.url) {
+                            setMusicCoverUrl(upRes.url);
+                          }
                         } catch (err) {
                           console.warn('Cover upload error:', err);
                         }
@@ -7082,6 +7087,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         }
                       } catch (err) {
                         console.warn('Audio duration detection error:', err);
+                      }
+                      try {
+                        const upRes = await UpMizikAPI.uploadFile(file, 'music');
+                        if (upRes && upRes.success && upRes.url) {
+                          setMusicAudioUrl(upRes.url);
+                        }
+                      } catch (err) {
+                        console.warn('Audio upload to server error:', err);
                       }
                     }
                   }}

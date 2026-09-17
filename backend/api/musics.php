@@ -200,8 +200,12 @@ if ($method === 'GET') {
     }
 
     if ($status && $status !== 'all') {
-        $query .= " AND m.statut = ?";
-        $params[] = mapStatusToDb($status);
+        if ($status === 'active') {
+            $query .= " AND (m.statut = 'actif' OR m.statut = 'en_attente' OR m.statut IS NULL)";
+        } else {
+            $query .= " AND m.statut = ?";
+            $params[] = mapStatusToDb($status);
+        }
     }
 
     if ($sortBy === 'position') {
@@ -291,7 +295,7 @@ if ($method === 'POST') {
     $coverUrl = $data['coverUrl'];
     $audioUrl = $data['audioUrl'];
     $duration = (int)($data['duration'] ?? 180);
-    $status = mapStatusToDb($data['status'] ?? 'pending');
+    $status = mapStatusToDb($data['status'] ?? 'active');
     $youtubeUrl = $data['youtubeUrl'] ?? null;
     $tiktokUrl = $data['tiktokUrl'] ?? null;
     $instagramUrl = $data['instagramUrl'] ?? null;

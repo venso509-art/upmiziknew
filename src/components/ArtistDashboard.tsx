@@ -415,8 +415,12 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
         if (compressed) {
           setCoverPreview(compressed);
         }
+        const upRes = await UpMizikAPI.uploadFile(file, 'covers');
+        if (upRes && upRes.success && upRes.url) {
+          setCoverPreview(upRes.url);
+        }
       } catch (err) {
-        console.warn('Cover upload compression error', err);
+        console.warn('Cover upload error', err);
       }
     }
   };
@@ -445,6 +449,14 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
         }
       } catch (err) {
         console.warn('Could not extract duration automatically', err);
+      }
+      try {
+        const upRes = await UpMizikAPI.uploadFile(file, 'music');
+        if (upRes && upRes.success && upRes.url) {
+          setAudioPreview(upRes.url);
+        }
+      } catch (err) {
+        console.warn('Audio upload to server error:', err);
       }
     }
   };
@@ -621,8 +633,12 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
         if (compressed) {
           setEditCoverPreview(compressed);
         }
+        const upRes = await UpMizikAPI.uploadFile(file, 'covers');
+        if (upRes && upRes.success && upRes.url) {
+          setEditCoverPreview(upRes.url);
+        }
       } catch (err) {
-        console.warn('Edit cover compression error', err);
+        console.warn('Edit cover upload error', err);
       }
     }
   };
@@ -651,6 +667,14 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
         }
       } catch (err) {
         console.warn('Could not extract duration automatically', err);
+      }
+      try {
+        const upRes = await UpMizikAPI.uploadFile(file, 'music');
+        if (upRes && upRes.success && upRes.url) {
+          setEditAudioPreview(upRes.url);
+        }
+      } catch (err) {
+        console.warn('Audio edit upload error:', err);
       }
     }
   };

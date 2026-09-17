@@ -51,7 +51,8 @@ if (!defined('DB_PORT')) define('DB_PORT', $rawPort);
 if (!defined('DB_NAME')) define('DB_NAME', $rawName);
 if (!defined('DB_USER')) define('DB_USER', $rawUser);
 if (!defined('DB_PASS')) define('DB_PASS', $rawPass);
-if (!defined('SITE_URL')) define('SITE_URL', rtrim(env('SITE_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . ($_SERVER['HTTP_HOST'] ?? 'localhost')), '/'));
+$isHttps = (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https') || (isset($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) === 'on');
+if (!defined('SITE_URL')) define('SITE_URL', rtrim(env('SITE_URL', ($isHttps ? "https" : "http") . "://" . ($_SERVER['HTTP_HOST'] ?? 'localhost')), '/'));
 
 if (!function_exists('getDBConnection')) {
     function getDBConnection(bool $throwOnError = false): PDO {
