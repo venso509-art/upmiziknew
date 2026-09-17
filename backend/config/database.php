@@ -31,18 +31,17 @@ if ($dbUrl && ($parsed = parse_url($dbUrl))) {
     if (!empty($parsed['path'])) $rawName = ltrim($parsed['path'], '/');
 }
 
-// 1. Nan nenpòt ka kote aplikasyon an anndan Docker (file_exists('/.dockerenv') se vre oswa Coolify),
-// fòse $rawHost la pou l kòmanse ak 'upmizik-db' pou anpeche timeout sou IP ekstèn VPS la.
-$isDocker = file_exists('/.dockerenv') || env('DOCKER_ENV') || getenv('COOLIFY_CONTAINER_NAME') || file_exists('/etc/docker');
-if ($isDocker && (empty($rawHost) || $rawHost === '2.25.132.44' || filter_var($rawHost, FILTER_VALIDATE_IP))) {
-    $rawHost = 'upmizik-db';
+// 1. IP ekstèn VPS la (2.25.132.44) dwe TOUJOU ranplase paske konekte sou li depi anndan Docker bay "Operation timed out"
+if (empty($rawHost) || $rawHost === '2.25.132.44' || str_contains($rawHost, '2.25.132.44')) {
+    $rawHost = 'bva4ne7esmb8nw0ri0oscbec';
 }
 
-if (!$rawHost) {
-    $rawHost = $isDocker ? 'upmizik-db' : 'localhost';
+// 2. Asire w modpas la pa rete vid si Coolify pa pase DB_PASS
+if (empty($rawPass)) {
+    $rawPass = 'WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs';
 }
 
-// 2. Asire w non baz de done a (fallback) mete sou 'upmiziknew'
+// 3. Asire w non baz de done a (fallback) mete sou 'upmiziknew'
 if (empty($rawName) || $rawName === 'upmizik_db') {
     $rawName = 'upmiziknew';
 }
@@ -61,25 +60,72 @@ if (!function_exists('getDBConnection')) {
             return $pdo;
         }
 
-        // Fòse socket timeout a 2 segonn pou anpeche PHP bloke/jele 30 segonn si yon host pa reponn
-        @ini_set('default_socket_timeout', 2);
+        // Fòse socket timeout a 1 segonn pou anpeche PHP bloke si yon host pa reponn
+        @ini_set('default_socket_timeout', 1);
 
-        $primaryHost = defined('DB_HOST') ? DB_HOST : 'upmizik-db';
-        $hostsToTry = array_unique(array_filter([
+        // Chache default gateway IP nan Linux /proc/net/route pou Docker
+        $gatewayIp = null;
+        if (file_exists('/proc/net/route') && is_readable('/proc/net/route')) {
+            $routes = @file('/proc/net/route');
+            if ($routes) {
+                foreach ($routes as $line) {
+                    $parts = preg_split('/\s+/', trim($line));
+                    if (isset($parts[1]) && $parts[1] === '00000000' && isset($parts[2])) {
+                        $gatewayIp = long2ip(hexdec(implode('', array_reverse(str_split($parts[2], 2)))));
+                        break;
+                    }
+                }
+            }
+        }
+
+        $primaryHost = defined('DB_HOST') ? DB_HOST : 'bva4ne7esmb8nw0ri0oscbec';
+        if ($primaryHost === '2.25.132.44') {
+            $primaryHost = 'bva4ne7esmb8nw0ri0oscbec';
+        }
+
+        $candidateHosts = array_unique(array_filter([
             $primaryHost,
+            'bva4ne7esmb8nw0ri0oscbec',
             'upmizik-db',
             'db',
             'mysql',
+            $gatewayIp,
+            '10.0.1.1',
             '172.17.0.1',
             'host.docker.internal',
             '127.0.0.1',
             'localhost'
         ]));
 
+        // Filtre sèlman host ki ka rezoud pou pa pèdi tan
+        $hostsToTry = [];
+        foreach ($candidateHosts as $h) {
+            if (empty($h) || $h === '2.25.132.44') continue;
+            if (filter_var($h, FILTER_VALIDATE_IP)) {
+                $hostsToTry[] = $h;
+            } else {
+                // Tcheke si DNS rezoud non an
+                $resolved = @gethostbyname($h);
+                if ($resolved !== $h) {
+                    $hostsToTry[] = $h;
+                }
+            }
+        }
+
+        // Si okenn non pa rezoud, mete fallback debaz yo
+        if (empty($hostsToTry)) {
+            $hostsToTry = ['upmizik-db', 'db', '127.0.0.1', 'localhost'];
+            if ($gatewayIp) $hostsToTry[] = $gatewayIp;
+        }
+
         $credentialsToTry = [
             [
                 'user' => defined('DB_USER') ? DB_USER : 'upmizikuser',
                 'pass' => defined('DB_PASS') ? DB_PASS : 'WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs'
+            ],
+            [
+                'user' => 'upmiziknew',
+                'pass' => 'WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs'
             ],
             [
                 'user' => 'upmizikuser',
@@ -91,11 +137,11 @@ if (!function_exists('getDBConnection')) {
             ],
             [
                 'user' => 'root',
-                'pass' => 'root_secure_pass_2026'
+                'pass' => 'WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs'
             ],
             [
                 'user' => 'root',
-                'pass' => 'WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs'
+                'pass' => 'root_secure_pass_2026'
             ]
         ];
 
@@ -113,7 +159,7 @@ if (!function_exists('getDBConnection')) {
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
-            PDO::ATTR_TIMEOUT            => 2,
+            PDO::ATTR_TIMEOUT            => 1,
             PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
         ];
 
@@ -157,6 +203,7 @@ if (!function_exists('getDBConnection')) {
                 'message' => 'Erè koneksyon ak baz done MySQL: ' . $lastException->getMessage(),
                 'data' => [
                     'tried_hosts' => $hostsToTry,
+                    'gateway' => $gatewayIp,
                     'primary_host' => DB_HOST,
                     'port' => DB_PORT,
                     'database' => DB_NAME,

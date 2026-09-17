@@ -24,6 +24,8 @@ $diag = [
         'DB_NAME' => env('DB_NAME'),
         'DB_USER' => env('DB_USER'),
         'HAS_DB_PASS' => !empty(env('DB_PASS')),
+        'HAS_DB_PASSWORD' => !empty(env('DB_PASSWORD')),
+        'HAS_MYSQL_PASSWORD' => !empty(env('MYSQL_PASSWORD')),
         'HAS_DATABASE_URL' => !empty(env('DATABASE_URL')),
         'HAS_MYSQL_URL' => !empty(env('MYSQL_URL'))
     ],
@@ -33,15 +35,19 @@ $diag = [
 ];
 
 // Eseye rezoud kèk non host
-$hostsToTest = ['upmizik-db', 'db', 'mysql', 'host.docker.internal', '172.17.0.1', 'localhost'];
+$hostsToTest = ['upmizik-db', 'db', 'mysql', '10.0.1.1', '172.17.0.1', 'localhost'];
 foreach ($hostsToTest as $h) {
-    $ip = gethostbyname($h);
-    $diag['dns_check'][$h] = ($ip !== $h) ? $ip : 'cannot resolve';
+    if (filter_var($h, FILTER_VALIDATE_IP)) {
+        $diag['dns_check'][$h] = 'IP Address';
+    } else {
+        $ip = @gethostbyname($h);
+        $diag['dns_check'][$h] = ($ip !== $h) ? $ip : 'cannot resolve';
+    }
 }
 
 // Tès koneksyon an
 try {
-    $pdo = getDBConnection();
+    $pdo = getDBConnection(true);
     $diag['connection_status'] = 'SUCCESS';
     
     // Konte done ki nan tablo yo

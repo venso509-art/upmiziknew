@@ -11,7 +11,7 @@ if (session_status() === PHP_SESSION_NONE) {
 // KONFIGIRASYON BAZ DONE MYSQL SOU HOSTINGER
 // ----------------------------------------------------------
 // Ranplase enfòmasyon sa yo ak sa ou kreye nan Hostinger hPanel > Databases
-define('DB_HOST', getenv('DB_HOST') ?: 'upmizik-db');
+define('DB_HOST', getenv('DB_HOST') ?: 'bva4ne7esmb8nw0ri0oscbec');
 define('DB_NAME', getenv('DB_NAME') ?: 'upmiziknew');
 define('DB_USER', getenv('DB_USER') ?: 'upmizikuser');
 define('DB_PASS', getenv('DB_PASS') ?: 'WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs');
