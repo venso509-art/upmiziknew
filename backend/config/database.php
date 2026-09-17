@@ -6,11 +6,11 @@
 require_once __DIR__ . '/env.php';
 
 // Detekte ak sipòte tout fòm varyab anviwònman Coolify, Docker ak Hostinger
-$rawHost = env('DB_HOST') ?: env('MYSQL_HOST') ?: env('DB_URL_HOST') ?: 'upmizik-db';
+$rawHost = env('DB_HOST') ?: env('MYSQL_HOST') ?: env('MYSQL_URL_HOST');
 $rawPort = env('DB_PORT') ?: env('MYSQL_PORT') ?: '3306';
 $rawName = env('DB_NAME') ?: env('MYSQL_DATABASE') ?: env('DB_DATABASE') ?: 'upmiziknew';
-$rawUser = env('DB_USER') ?: env('MYSQL_USER') ?: 'upmizikuser';
-$rawPass = env('DB_PASS') ?: env('MYSQL_PASSWORD') ?: env('DB_PASSWORD') ?: 'WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs';
+$rawUser = env('DB_USER') ?: env('MYSQL_USER') ?: 'upmizik_user';
+$rawPass = env('DB_PASS') ?: env('MYSQL_PASSWORD') ?: env('DB_PASSWORD') ?: 'upmizik_secure_pass_2026';
 
 // Parse DATABASE_URL si Coolify bay yon URL konplè tankou: mysql://user:pass@host:port/dbname
 $dbUrl = env('DATABASE_URL') ?: env('MYSQL_URL');
@@ -22,8 +22,20 @@ if ($dbUrl && ($parsed = parse_url($dbUrl))) {
     if (!empty($parsed['path'])) $rawName = ltrim($parsed['path'], '/');
 }
 
+// 1. Nan nenpòt ka kote aplikasyon an anndan Docker (file_exists('/.dockerenv') se vre),
+// fòse $rawHost la pou l toujou itilize 'upmizik-db'. Li dwe anile epi ranplase nenpòt IP ekstèn oswa host ki soti nan DATABASE_URL oswa lòt varyab anviwònman yo.
+$isDocker = file_exists('/.dockerenv') || env('DOCKER_ENV') || getenv('COOLIFY_CONTAINER_NAME') || file_exists('/etc/docker');
+if ($isDocker) {
+    $rawHost = 'upmizik-db';
+}
+
 if (!$rawHost) {
-    $rawHost = file_exists('/.dockerenv') ? 'upmizik-db' : 'localhost';
+    $rawHost = $isDocker ? 'upmizik-db' : 'localhost';
+}
+
+// 2. Asire w non baz de done a (fallback) mete sou 'upmiziknew'
+if (empty($rawName) || $rawName === 'upmizik_db') {
+    $rawName = 'upmiziknew';
 }
 
 define('DB_HOST', $rawHost);
@@ -42,8 +54,8 @@ if (!function_exists('getDBConnection')) {
 
         $hostsToTry = array_unique(array_filter([
             DB_HOST,
-            'db',
             'upmizik-db',
+            'db',
             'mysql',
             '127.0.0.1',
             'localhost'
