@@ -41,11 +41,11 @@ services:
     ports:
       - "80"
     environment:
-      DB_HOST: "db"
+      DB_HOST: "upmizik-db"
       DB_PORT: 3306
-      DB_NAME: "upmizik_db"
-      DB_USER: "upmizik_user"
-      DB_PASS: "upmizik_secure_pass_2026"
+      DB_NAME: "upmiziknew"
+      DB_USER: "upmizikuser"
+      DB_PASS: "WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs"
       APP_ENV: "production"
     volumes:
       - "uploads_data:/var/www/html/backend/uploads"
@@ -64,10 +64,10 @@ services:
     name: upmizik-db
     image: "mysql:8.0"
     environment:
-      MYSQL_ROOT_PASSWORD: "root_secure_pass_2026"
-      MYSQL_DATABASE: "upmizik_db"
-      MYSQL_USER: "upmizik_user"
-      MYSQL_PASSWORD: "upmizik_secure_pass_2026"
+      MYSQL_ROOT_PASSWORD: "WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs"
+      MYSQL_DATABASE: "upmiziknew"
+      MYSQL_USER: "upmizikuser"
+      MYSQL_PASSWORD: "WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs"
     volumes:
       - "db_data:/var/lib/mysql"
       - "./backend/database/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro"

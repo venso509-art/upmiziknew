@@ -39,11 +39,11 @@ services:
     expose:
       - "80"
     environment:
-      - DB_HOST=db
+      - DB_HOST=upmizik-db
       - DB_PORT=3306
-      - DB_NAME=upmizik_db
-      - DB_USER=upmizik_user
-      - DB_PASS=upmizik_secure_pass_2026
+      - DB_NAME=upmiziknew
+      - DB_USER=upmizikuser
+      - DB_PASS=WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs
       - APP_ENV=production
       - CORS_ALLOWED_ORIGIN=https://upmizik.com,https://www.upmizik.com
     volumes:
@@ -73,10 +73,10 @@ services:
     restart: always
     command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
-      MYSQL_ROOT_PASSWORD: root_secure_pass_2026
-      MYSQL_DATABASE: upmizik_db
-      MYSQL_USER: upmizik_user
-      MYSQL_PASSWORD: upmizik_secure_pass_2026
+      MYSQL_ROOT_PASSWORD: WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs
+      MYSQL_DATABASE: upmiziknew
+      MYSQL_USER: upmizikuser
+      MYSQL_PASSWORD: WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs
     volumes:
       - db_data:/var/lib/mysql
       # Inisyalize tout tablo baz done yo otomatikman

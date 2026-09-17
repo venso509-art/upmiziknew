@@ -26,10 +26,11 @@ try {
         'target_user' => DB_USER,
         'target_db' => DB_NAME
     ];
-    $pdo = getDBConnection();
+    $pdo = getDBConnection(true);
     $response['database'] = 'connected';
 } catch (Throwable $e) {
     $response['database'] = 'disconnected (' . $e->getMessage() . ')';
+    $response['status'] = 'database_error';
 }
 
 http_response_code(200);

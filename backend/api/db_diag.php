@@ -1,16 +1,23 @@
 <?php
 /**
  * UpMizik - Database Diagnostic Endpoint
- * Egzamine an detay ki valè varyab anviwònman PHP resevwa
+ * Egzamine an detay ki valè varyab anviwònman PHP resevwa ak tès koneksyon an tan reyèl
  */
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 
-require_once dirname(__DIR__) . '/config/env.php';
+require_once dirname(__DIR__) . '/config/database.php';
 
 $diag = [
     'timestamp' => date('Y-m-d H:i:s'),
+    'db_constants' => [
+        'DB_HOST' => defined('DB_HOST') ? DB_HOST : null,
+        'DB_PORT' => defined('DB_PORT') ? DB_PORT : null,
+        'DB_NAME' => defined('DB_NAME') ? DB_NAME : null,
+        'DB_USER' => defined('DB_USER') ? DB_USER : null,
+        'HAS_DB_PASS' => defined('DB_PASS') && !empty(DB_PASS)
+    ],
     'env_vars_detected' => [
         'DB_HOST' => env('DB_HOST'),
         'DB_PORT' => env('DB_PORT'),
@@ -26,10 +33,30 @@ $diag = [
 ];
 
 // Eseye rezoud kèk non host
-$hostsToTest = ['db', 'upmizik-db', 'host.docker.internal', 'localhost', '172.17.0.1'];
+$hostsToTest = ['upmizik-db', 'db', 'mysql', 'host.docker.internal', '172.17.0.1', 'localhost'];
 foreach ($hostsToTest as $h) {
     $ip = gethostbyname($h);
     $diag['dns_check'][$h] = ($ip !== $h) ? $ip : 'cannot resolve';
+}
+
+// Tès koneksyon an
+try {
+    $pdo = getDBConnection();
+    $diag['connection_status'] = 'SUCCESS';
+    
+    // Konte done ki nan tablo yo
+    $counts = [];
+    foreach (['artistes', 'musiques', 'dons', 'utilisateurs', 'pubs', 'rpa', 'social_posts'] as $tab) {
+        try {
+            $stmt = $pdo->query("SELECT COUNT(*) as total FROM `{$tab}`");
+            $counts[$tab] = (int)$stmt->fetchColumn();
+        } catch (Throwable $e) {
+            $counts[$tab] = 'Tab pa egziste: ' . $e->getMessage();
+        }
+    }
+    $diag['table_counts'] = $counts;
+} catch (Throwable $e) {
+    $diag['connection_status'] = 'FAILED: ' . $e->getMessage();
 }
 
 echo json_encode($diag, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
