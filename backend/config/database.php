@@ -79,19 +79,19 @@ if (!function_exists('getDBConnection')) {
             }
         }
 
-        $primaryHost = defined('DB_HOST') ? DB_HOST : 'upmizik-db';
+        $primaryHost = defined('DB_HOST') ? DB_HOST : 'bva4ne7esmb8nw0ri0oscbec';
         if ($primaryHost === '2.25.132.44') {
-            $primaryHost = 'upmizik-db';
+            $primaryHost = 'bva4ne7esmb8nw0ri0oscbec';
         }
 
         $candidateHosts = array_unique(array_filter([
             $primaryHost,
+            'bva4ne7esmb8nw0ri0oscbec',
             'upmizik-db',
             'db',
             'mysql',
             '127.0.0.1',
             'localhost',
-            'bva4ne7esmb8nw0ri0oscbec',
             $gatewayIp,
             '10.0.1.1',
             '172.17.0.1',
