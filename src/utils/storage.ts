@@ -164,6 +164,9 @@ function sanitizeForLocalStorage(key: string, data: any): any {
       if (copy.proofUrl && copy.proofUrl.startsWith('data:image')) {
         const idbKey = `proof_${copy.id}`;
         IdbStorage.saveMedia(idbKey, copy.proofUrl);
+        if (copy.proofUrl.length > 100000) {
+          copy.proofUrl = `idb:${idbKey}`;
+        }
       }
       return copy;
     });
@@ -175,6 +178,14 @@ function sanitizeForLocalStorage(key: string, data: any): any {
       if (copy.registrationProofUrl && copy.registrationProofUrl.startsWith('data:image')) {
         const idbKey = `artist_proof_${copy.id}`;
         IdbStorage.saveMedia(idbKey, copy.registrationProofUrl);
+        if (copy.registrationProofUrl.length > 100000) {
+          copy.registrationProofUrl = `idb:${idbKey}`;
+        }
+      }
+      if (copy.avatarUrl && copy.avatarUrl.startsWith('data:image') && copy.avatarUrl.length > 100000) {
+        const idbKey = `artist_avatar_${copy.id}`;
+        IdbStorage.saveMedia(idbKey, copy.avatarUrl);
+        copy.avatarUrl = `idb:${idbKey}`;
       }
       return copy;
     });
@@ -1360,7 +1371,7 @@ export const StorageService = {
   getDonations: (adminAuth?: AdminUser | null): DonationItem[] => {
     // Sekirite: Si moun nan pa gen wòl 'super_admin' verifye, pa voye done finansye yo
     const activeAdmin = adminAuth || StorageService.getLoggedInAdmin();
-    if (!activeAdmin || activeAdmin.role !== 'super_admin') {
+    if (!activeAdmin || (activeAdmin.role !== 'super_admin' && activeAdmin.role !== 'admin')) {
       return [];
     }
     return StorageService.getRawStoredDonations();
@@ -1849,7 +1860,7 @@ export const StorageService = {
   
   getArchives: (adminAuth?: AdminUser | null): ArchiveRecord[] => {
     const activeAdmin = adminAuth || StorageService.getLoggedInAdmin();
-    if (!activeAdmin || activeAdmin.role !== 'super_admin') {
+    if (!activeAdmin || (activeAdmin.role !== 'super_admin' && activeAdmin.role !== 'admin')) {
       return [];
     }
     return StorageService.getRawStoredArchives();

@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { ArtistUser, PaymentSettingsConfig } from '../types';
 import { HAITIAN_DEPARTMENTS_AND_CITIES, ALL_HAITIAN_CITIES } from '../data/haitianCities';
-import { compressAndReadFile, resolveMediaUrl } from '../utils/imageUtils';
+import { compressAndReadFile, resolveMediaUrl, DEFAULT_ARTIST_AVATAR } from '../utils/imageUtils';
 import { StorageService } from '../utils/storage';
 import { HostingerService } from '../utils/hostingerService';
 import { UpMizikAPI } from '../utils/apiService';
@@ -35,7 +35,7 @@ import { validateRestrictedDigits, hasRestrictedPhoneOrDigits, RESTRICTED_DIGITS
 interface ArtistAuthModalProps {
   onClose: () => void;
   onLoginSuccess: (artist: ArtistUser) => void;
-  onRegisterArtist: (newArtist: ArtistUser) => void;
+  onRegisterArtist: (newArtist: ArtistUser) => Promise<{ success: boolean; message?: string } | void> | void;
   existingArtists: ArtistUser[];
 }
 
@@ -157,6 +157,29 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
       c.toLowerCase().includes(citySearchQuery.toLowerCase().trim())
     ).slice(0, 8);
   }, [citySearchQuery]);
+
+  // Detekte an tan reyèl si imèl la deja itilize sou platfòm nan pou evite doublon
+  const emailDuplicateStatus = useMemo(() => {
+    const clean = (email || '').trim().toLowerCase();
+    if (!clean || !clean.includes('@') || clean.length < 5) return null;
+    const all = StorageService.getArtists();
+    const match = all.find(a => (a.email || '').trim().toLowerCase() === clean);
+    if (!match) return null;
+    const stage = match.stageName || match.name;
+    if (match.status === 'active' || !match.status) {
+      return {
+        type: 'active' as const,
+        message: `Imèl sa a deja anrejistre sou yon kont atis valide ("${stage}"). Règleman an entèdi plizyè moun sou menm imèl la.`
+      };
+    }
+    if (match.status === 'pending') {
+      return {
+        type: 'pending' as const,
+        message: `Gen yon demand enskripsyon ki deja soumèt ak imèl sa a pou atis "${stage}" k ap tann validasyon admin.`
+      };
+    }
+    return null;
+  }, [email]);
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -376,35 +399,30 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
     const cleanEmail = email.trim().toLowerCase();
     const cleanPhoneDigits = phone.trim().replace(/\D/g, '');
     const currentArtists = StorageService.getArtists();
-    const existingArtist = currentArtists.find(a => 
-      (a.email && a.email.trim().toLowerCase() === cleanEmail) ||
-      (cleanPhoneDigits && (a.phone || '').replace(/\D/g, '') === cleanPhoneDigits)
-    );
 
-    if (existingArtist) {
-      if (existingArtist.status === 'active') {
-        setErrorMsg('Gen yon kont atis ki deja aktif ak imèl oswa nimewo telefòn sa a. Tanpri klike sou tab "2. Konekte ak Kont Ou" pou w konekte.');
+    // 1. Tcheke si imèl sa a deja egziste sou sistèm nan
+    const matchByEmail = currentArtists.find(a => (a.email || '').trim().toLowerCase() === cleanEmail);
+    if (matchByEmail) {
+      const artName = matchByEmail.stageName || matchByEmail.name;
+      if (matchByEmail.status === 'active' || !matchByEmail.status) {
+        setErrorMsg(`Imèl "${cleanEmail}" la deja anrejistre epi valide pou atis "${artName}". Règleman sekirite UpMizik la entèdi plis pase yon enskripsyon sou menm imèl la. Tanpri klike sou tab "2. Konekte ak Kont Ou" pou w konekte.`);
         return;
-      } else if (existingArtist.status === 'pending') {
-        // Atis la te soumèt deja men li an atant: mete ajou objè a san kreye doublon
-        const reusedArtistObj: ArtistUser = {
-          ...existingArtist,
-          name: name.trim(),
-          stageName: stageName.trim(),
-          phone: phone.trim(),
-          city: city.trim(),
-          pin: cleanPin,
-          avatarUrl: avatarPreview || existingArtist.avatarUrl,
-          bio: bio.trim() || existingArtist.bio,
-          musicalRoots: musicalRoots.trim() || existingArtist.musicalRoots,
-          musicalInfluences: musicalInfluences.trim() || existingArtist.musicalInfluences,
-          artisticVision: artisticVision.trim() || existingArtist.artisticVision,
-          artistQuote: artistQuote.trim() || existingArtist.artistQuote,
-          registrationFeeUsd: regFeeUsd,
-          registrationFeeHtg: regFeeHtg
-        };
-        setTempArtist(reusedArtistObj);
-        setStep('welcome_letter');
+      }
+      if (matchByEmail.status === 'pending') {
+        setErrorMsg(`Gen yon demand enskripsyon ki deja soumèt ak imèl "${cleanEmail}" la pou atis "${artName}" k ap tann validasyon pa administratè a (Mr clauvens). Ou pa ka kreye yon dezyèm kont sou menm imèl la. Tanpri ale nan "2. Konekte ak Kont Ou" pou w wè estati kont ou.`);
+        return;
+      }
+      if (matchByEmail.status === 'suspended') {
+        setErrorMsg(`Kont atis ki lye ak imèl sa a tanporèman sispann. Tanpri ale nan tab "2. Konekte ak Kont Ou" oswa kontakte sipò a.`);
+        return;
+      }
+    }
+
+    // 2. Tcheke si nimewo telefòn nan deja itilize pa yon lòt atis aktif
+    if (cleanPhoneDigits) {
+      const matchByPhone = currentArtists.find(a => (a.phone || '').replace(/\D/g, '') === cleanPhoneDigits);
+      if (matchByPhone && (matchByPhone.status === 'active' || !matchByPhone.status)) {
+        setErrorMsg(`Nimewo telefòn sa a deja itilize sou kont atis "${matchByPhone.stageName || matchByPhone.name}". Ou pa ka anrejistre yon lòt atis ak menm nimewo a.`);
         return;
       }
     }
@@ -417,7 +435,7 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
       phone: phone.trim(),
       city: city.trim(),
       pin: cleanPin,
-      avatarUrl: avatarPreview || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+      avatarUrl: avatarPreview || DEFAULT_ARTIST_AVATAR,
       bio: bio.trim() || `Atis k ap kreye bèl mizik kreyòl nan vil ${city}`,
       musicalRoots: musicalRoots.trim() || undefined,
       musicalInfluences: musicalInfluences.trim() || undefined,
@@ -435,35 +453,56 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
       totalDonationsReceived: 0
     };
 
-    // Prepare temp artist and advance to Welcome Letter (only registered to database once proof is attached)
+    // Konsève dosye a pou atis la aksepte kontra a epi telechaje foto transfè a anvan li soumèt nan espas validasyon admin
     setTempArtist(newArtistObj);
     setStep('welcome_letter');
   };
 
-  const handleProofSubmit = (e: React.FormEvent) => {
+  const handleProofSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!proofPreview) {
-      setErrorMsg(`Tanpri telechaje foto prèv $${regFeeUsd.toFixed(2)} la.`);
+      setErrorMsg(`Tanpri telechaje foto prèv transfè $${regFeeUsd.toFixed(2)} USD la.`);
       return;
     }
 
     if (tempArtist) {
       setIsLoading(true);
-      setTimeout(() => {
-        setIsLoading(false);
+      setErrorMsg('');
+      try {
+        let finalProofUrl = proofPreview;
+        // Si se toujou yon done base64 brit, eseye voye l sou sèvè a anvan
+        if (finalProofUrl.startsWith('data:image')) {
+          try {
+            const uploadRes = await UpMizikAPI.uploadBase64(finalProofUrl, 'proofs');
+            if (uploadRes && uploadRes.success && uploadRes.url) {
+              finalProofUrl = resolveMediaUrl(uploadRes.url);
+            }
+          } catch {}
+        }
+
         const finalArtist: ArtistUser = {
           ...tempArtist,
-          registrationProofUrl: proofPreview,
+          registrationProofUrl: finalProofUrl,
           status: 'pending'
         };
-        onRegisterArtist(finalArtist);
+
+        const regRes = await onRegisterArtist(finalArtist);
+        if (regRes && typeof regRes === 'object' && !regRes.success) {
+          setErrorMsg(regRes.message || 'Imèl sa a deja anrejistre sou yon kont atis valide.');
+          return;
+        }
+
         setTempArtist(finalArtist);
         setStep('registered_pending_notice');
-      }, 800);
+      } catch (err: any) {
+        setErrorMsg(err?.message || 'Gen yon ti pwoblèm pandan transmisyon dosye a. Tanpri re-eseye.');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
-  const handleResubmitProof = (e: React.FormEvent) => {
+  const handleResubmitProof = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!proofPreview) {
       setErrorMsg(`Tanpri telechaje yon nouvo foto prèv $${regFeeUsd.toFixed(2)} ki klè.`);
@@ -472,18 +511,38 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
 
     if (tempArtist) {
       setIsLoading(true);
-      setTimeout(() => {
-        setIsLoading(false);
+      setErrorMsg('');
+      try {
+        let finalProofUrl = proofPreview;
+        if (finalProofUrl.startsWith('data:image')) {
+          try {
+            const uploadRes = await UpMizikAPI.uploadBase64(finalProofUrl, 'proofs');
+            if (uploadRes && uploadRes.success && uploadRes.url) {
+              finalProofUrl = resolveMediaUrl(uploadRes.url);
+            }
+          } catch {}
+        }
+
         const updatedArtist: ArtistUser = {
           ...tempArtist,
-          registrationProofUrl: proofPreview,
+          registrationProofUrl: finalProofUrl,
           status: 'pending',
           registrationRejectionReason: undefined
         };
-        onRegisterArtist(updatedArtist);
+
+        const regRes = await onRegisterArtist(updatedArtist);
+        if (regRes && typeof regRes === 'object' && !regRes.success) {
+          setErrorMsg(regRes.message || 'Imèl sa a deja anrejistre sou yon kont atis valide.');
+          return;
+        }
+
         setTempArtist(updatedArtist);
         setStep('registered_pending_notice');
-      }, 800);
+      } catch (err: any) {
+        setErrorMsg(err?.message || 'Gen yon ti pwoblèm pandan transmisyon nouvo prèv la. Tanpri re-eseye.');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -630,10 +689,21 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
                       type="email"
                       required
                       value={email ?? ''}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        setErrorMsg('');
+                      }}
                       placeholder="atis@upmizik.com"
-                      className="w-full bg-[#05070a] border border-white/[0.12] rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-blue-500 outline-none"
+                      className={`w-full bg-[#05070a] border ${
+                        emailDuplicateStatus ? 'border-red-500/80 focus:border-red-400' : 'border-white/[0.12] focus:border-blue-500'
+                      } rounded-xl px-3.5 py-2.5 text-xs text-white outline-none`}
                     />
+                    {emailDuplicateStatus && (
+                      <p className="text-[10px] text-red-400 font-semibold mt-1 flex items-start gap-1 leading-tight animate-fadeIn">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        <span>{emailDuplicateStatus.message}</span>
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-300 mb-1">Telefòn (Moncash/Natcash) *</label>
@@ -1325,12 +1395,7 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
             <button
               id="close-pending-registered-notice-btn"
               type="button"
-              onClick={() => {
-                if (tempArtist) {
-                  onRegisterArtist(tempArtist);
-                }
-                handleClose();
-              }}
+              onClick={handleClose}
               className="w-full py-3.5 rounded-xl font-bold text-xs bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 text-slate-950 shadow-xl shadow-yellow-500/20 active:scale-98 transition-all flex items-center justify-center gap-2"
             >
               <span>Mwen Konprann, Fèmen</span>

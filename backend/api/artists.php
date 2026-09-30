@@ -207,27 +207,67 @@ if ($method === 'POST') {
         ], 400);
     }
 
-    $id = !empty($data['id']) ? $data['id'] : 'art_' . time() . '_' . bin2hex(random_bytes(3));
     $name = trim($data['name']);
     $stageName = trim($data['stageName']);
     $email = strtolower(trim($data['email']));
     $phone = trim($data['phone']);
     $city = $data['city'] ?? 'Pòtoprens';
     $pin = !empty($data['pin']) ? (strlen($data['pin']) === 60 ? $data['pin'] : password_hash($data['pin'], PASSWORD_BCRYPT, ['cost' => 10])) : password_hash('0000', PASSWORD_BCRYPT, ['cost' => 10]);
-    $avatarUrl = $data['avatarUrl'] ?? $data['avatar'] ?? $data['avatar_url'] ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80';
+    $avatarUrl = $data['avatarUrl'] ?? $data['avatar'] ?? $data['avatar_url'] ?? null;
     $registrationProofUrl = $data['registrationProofUrl'] ?? null;
 
+    // Tcheke si imèl sa a deja anrejistre sou yon atis nan baz done a
+    try {
+        $checkStmt = $pdo->prepare("SELECT id, nom_scene, nom_complet, statut FROM artistes WHERE email = ? LIMIT 1");
+        $checkStmt->execute([$email]);
+        $existingRow = $checkStmt->fetch();
+        if ($existingRow && !empty($existingRow['id'])) {
+            $existingStatus = strtolower($existingRow['statut'] ?? '');
+            $registeredName = $existingRow['nom_scene'] ?: $existingRow['nom_complet'];
+
+            // 1. Si kont lan deja aktif oswa valide, entèdi tout lòt enskripsyon sou menm imèl la
+            if ($existingStatus === 'actif' || $existingStatus === 'active') {
+                jsonResponse([
+                    'success' => false,
+                    'message' => 'Imèl sa a (' . htmlspecialchars($email) . ') deja anrejistre epi valide pou atis "' . htmlspecialchars($registeredName) . '". Règleman sekirite UpMizik entèdi plizyè moun anrejistre sou menm imèl la. Tanpri konekte ak kont ou.',
+                    'data' => null,
+                    'errors' => ['Email already active on platform']
+                ], 409);
+            }
+
+            // 2. Si kont lan deja an atant validasyon, avèti itilizatè a
+            if ($existingStatus === 'en_attente' || $existingStatus === 'pending') {
+                // Si se menm ID a k ap mete ajou prèv li, otorize l, sinon bloke nouvo enskripsyon
+                if (!empty($data['id']) && $data['id'] !== $existingRow['id']) {
+                    jsonResponse([
+                        'success' => false,
+                        'message' => 'Gen yon demand enskripsyon ki deja soumèt ak imèl sa a pou atis "' . htmlspecialchars($registeredName) . '" k ap tann validasyon admin. Ou pa ka kreye yon dezyèm kont sou menm imèl la.',
+                        'data' => null,
+                        'errors' => ['Email registration already pending']
+                    ], 409);
+                }
+            }
+
+            $id = $existingRow['id'];
+        } else {
+            $id = !empty($data['id']) ? $data['id'] : 'art_' . time() . '_' . bin2hex(random_bytes(3));
+        }
+    } catch (Throwable $e) {
+        $id = !empty($data['id']) ? $data['id'] : 'art_' . time() . '_' . bin2hex(random_bytes(3));
+    }
+
     // Otomatikman konvèti prèv enskripsyon base64 soti sou telefòn pou l vin yon fichye fizik
-    if ($registrationProofUrl && strpos($registrationProofUrl, 'data:image/') === 0) {
+    if ($registrationProofUrl && strpos($registrationProofUrl, 'data:image') === 0) {
         try {
             $proofDir = dirname(__DIR__) . '/uploads/proofs';
             if (!is_dir($proofDir)) {
-                @mkdir($proofDir, 0755, true);
+                @mkdir($proofDir, 0775, true);
             }
-            if (preg_match('/^data:image\/(\w+);base64,/', $registrationProofUrl, $type)) {
+            if (preg_match('/^data:image\/([a-zA-Z0-9\+\.-]+);base64,/', $registrationProofUrl, $type)) {
                 $rawBase64 = substr($registrationProofUrl, strpos($registrationProofUrl, ',') + 1);
                 $ext = strtolower($type[1]);
-                if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
+                if ($ext === 'jpeg') $ext = 'jpg';
+                if (!in_array($ext, ['jpg', 'png', 'webp', 'gif'])) {
                     $ext = 'jpg';
                 }
                 $decoded = base64_decode($rawBase64);
@@ -239,20 +279,23 @@ if ($method === 'POST') {
                     }
                 }
             }
-        } catch (Throwable $e) {}
+        } catch (Throwable $e) {
+            error_log('[Proof Save Warning]: ' . $e->getMessage());
+        }
     }
 
     // Otomatikman konvèti avatar base64 soti sou telefòn
-    if ($avatarUrl && strpos($avatarUrl, 'data:image/') === 0) {
+    if ($avatarUrl && strpos($avatarUrl, 'data:image') === 0) {
         try {
             $avatarDir = dirname(__DIR__) . '/uploads/avatars';
             if (!is_dir($avatarDir)) {
-                @mkdir($avatarDir, 0755, true);
+                @mkdir($avatarDir, 0775, true);
             }
-            if (preg_match('/^data:image\/(\w+);base64,/', $avatarUrl, $type)) {
+            if (preg_match('/^data:image\/([a-zA-Z0-9\+\.-]+);base64,/', $avatarUrl, $type)) {
                 $rawBase64 = substr($avatarUrl, strpos($avatarUrl, ',') + 1);
                 $ext = strtolower($type[1]);
-                if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
+                if ($ext === 'jpeg') $ext = 'jpg';
+                if (!in_array($ext, ['jpg', 'png', 'webp', 'gif'])) {
                     $ext = 'jpg';
                 }
                 $decoded = base64_decode($rawBase64);
@@ -264,7 +307,9 @@ if ($method === 'POST') {
                     }
                 }
             }
-        } catch (Throwable $e) {}
+        } catch (Throwable $e) {
+            error_log('[Avatar Save Warning]: ' . $e->getMessage());
+        }
     }
 
     $bio = $data['bio'] ?? null;
@@ -278,54 +323,70 @@ if ($method === 'POST') {
     $headerBannerUrl = $data['headerBannerUrl'] ?? null;
     $bannerGenreTheme = $data['bannerGenreTheme'] ?? null;
 
-    $stmt = $pdo->prepare("
-        INSERT INTO artistes (
-            id, nom_complet, nom_scene, email, telephone, ville, pin, avatar_url, bio,
-            racines_musicales, influences, vision_artistique, statut,
-            preuve_inscription_url, youtube_url, instagram_url,
-            tiktok_url, banniere_url,
-            theme_banniere, date_inscription
-        ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?,
-            ?, ?, ?,
-            ?, ?,
-            ?, NOW()
-        )
-        ON DUPLICATE KEY UPDATE
-            nom_complet = VALUES(nom_complet),
-            nom_scene = VALUES(nom_scene),
-            telephone = VALUES(telephone),
-            ville = VALUES(ville),
-            avatar_url = VALUES(avatar_url),
-            bio = VALUES(bio),
-            racines_musicales = VALUES(racines_musicales),
-            influences = VALUES(influences),
-            vision_artistique = VALUES(vision_artistique),
-            statut = VALUES(statut),
-            preuve_inscription_url = VALUES(preuve_inscription_url),
-            youtube_url = VALUES(youtube_url),
-            instagram_url = VALUES(instagram_url),
-            tiktok_url = VALUES(tiktok_url),
-            banniere_url = VALUES(banniere_url),
-            theme_banniere = VALUES(theme_banniere)
-    ");
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO artistes (
+                id, nom_complet, nom_scene, email, telephone, ville, pin, avatar_url, bio,
+                racines_musicales, influences, vision_artistique, statut,
+                preuve_inscription_url, youtube_url, instagram_url,
+                tiktok_url, banniere_url,
+                theme_banniere, date_inscription
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?,
+                ?, ?,
+                ?, NOW()
+            )
+            ON DUPLICATE KEY UPDATE
+                nom_complet = VALUES(nom_complet),
+                nom_scene = VALUES(nom_scene),
+                telephone = VALUES(telephone),
+                ville = VALUES(ville),
+                avatar_url = COALESCE(VALUES(avatar_url), avatar_url),
+                bio = VALUES(bio),
+                racines_musicales = VALUES(racines_musicales),
+                influences = VALUES(influences),
+                vision_artistique = VALUES(vision_artistique),
+                statut = VALUES(statut),
+                preuve_inscription_url = COALESCE(VALUES(preuve_inscription_url), preuve_inscription_url),
+                youtube_url = VALUES(youtube_url),
+                instagram_url = VALUES(instagram_url),
+                tiktok_url = VALUES(tiktok_url),
+                banniere_url = VALUES(banniere_url),
+                theme_banniere = VALUES(theme_banniere)
+        ");
 
-    $stmt->execute([
-        $id, $name, $stageName, $email, $phone, $city, $pin, $avatarUrl, $bio,
-        $musicalRoots, $musicalInfluences, $artisticVision, $status,
-        $registrationProofUrl, $youtubeUrl, $instagramUrl,
-        $tiktokUrl, $headerBannerUrl,
-        $bannerGenreTheme
-    ]);
+        $stmt->execute([
+            $id, $name, $stageName, $email, $phone, $city, $pin, $avatarUrl, $bio,
+            $musicalRoots, $musicalInfluences, $artisticVision, $status,
+            $registrationProofUrl, $youtubeUrl, $instagramUrl,
+            $tiktokUrl, $headerBannerUrl,
+            $bannerGenreTheme
+        ]);
 
-    jsonResponse([
-        'success' => true,
-        'message' => 'Enskripsyon atis la fèt avèk siksè nan baz done a!',
-        'data' => ['artistId' => $id],
-        'artistId' => $id,
-        'errors' => []
-    ], 201);
+        jsonResponse([
+            'success' => true,
+            'message' => 'Enskripsyon atis la fèt avèk siksè nan baz done a!',
+            'data' => [
+                'artistId' => $id,
+                'registrationProofUrl' => $registrationProofUrl,
+                'avatarUrl' => $avatarUrl
+            ],
+            'artistId' => $id,
+            'registrationProofUrl' => $registrationProofUrl,
+            'avatarUrl' => $avatarUrl,
+            'errors' => []
+        ], 201);
+    } catch (Throwable $e) {
+        error_log('[Artists Insert Error]: ' . $e->getMessage());
+        jsonResponse([
+            'success' => false,
+            'message' => 'Erè pandan anrejistreman atis la nan baz done a: ' . $e->getMessage(),
+            'data' => null,
+            'errors' => [$e->getMessage()]
+        ], 500);
+    }
 }
 
 // ----------------------------------------------------------

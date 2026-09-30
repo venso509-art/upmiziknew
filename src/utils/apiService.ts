@@ -6,7 +6,7 @@
  */
 
 import { ArtistUser, MusicItem, DonationItem, ArtistInboxMessage, SocialPost, PubItem, RpaItem, PaymentSettingsConfig } from '../types';
-import { resolveMediaUrl } from './imageUtils';
+import { resolveMediaUrl, DEFAULT_ARTIST_AVATAR, DEFAULT_SONG_COVER } from './imageUtils';
 
 // API Base URL:
 // Sèvi ak chemen relatif /backend/api lè n ap kouri sou upmizik.com, sou IP VPS la, oswa localhost.
@@ -105,7 +105,7 @@ class ApiService {
       if (!Array.isArray(list)) return [];
       return list.map((a: ArtistUser) => ({
         ...a,
-        avatarUrl: resolveMediaUrl(a.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'),
+        avatarUrl: resolveMediaUrl(a.avatarUrl, DEFAULT_ARTIST_AVATAR),
         registrationProofUrl: a.registrationProofUrl ? resolveMediaUrl(a.registrationProofUrl) : undefined,
         headerBannerUrl: a.headerBannerUrl ? resolveMediaUrl(a.headerBannerUrl) : undefined,
       }));
@@ -176,7 +176,7 @@ class ApiService {
       if (!Array.isArray(list)) return [];
       return list.map((m: MusicItem) => ({
         ...m,
-        coverUrl: resolveMediaUrl(m.coverUrl, 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80'),
+        coverUrl: resolveMediaUrl(m.coverUrl, DEFAULT_SONG_COVER),
         audioUrl: resolveMediaUrl(m.audioUrl),
       }));
     } catch {

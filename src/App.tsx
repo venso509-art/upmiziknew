@@ -360,7 +360,11 @@ export default function App() {
         // Verifye si repons lan se bon JSON epi li pa kòd PHP an tèks brit
         if (contentType.includes('application/json') || (rawText.trim().startsWith('{') && rawText.trim().endsWith('}'))) {
           const data = JSON.parse(rawText);
-          console.log('🔍 [UpMizik Backend HealthCheck]:', data);
+          if (data.status === 'ok') {
+            console.log(`✅ [UpMizik Backend]: Sèvè PHP a konekte e li reponn 100%! (PHP ${data.php_version}, Baz Done: ${data.database}, Uploads: ${data.uploads_writable ? 'Ouvè' : 'Fèmen'})`, data);
+          } else {
+            console.warn(`⚠️ [UpMizik Backend]: Sèvè a reponn ak estati: ${data.status}`, data);
+          }
         } else {
           // Si sèvè lokal la retounen fichye .php a an tèks san egzekite l (Vite dev server)
           console.info('ℹ️ [UpMizik Backend HealthCheck]: Anviwònman lokal/preview pa gen PHP runtime entegre. Backend la deplwaye sou https://api.upmizik.com');
@@ -1120,19 +1124,39 @@ export default function App() {
     addToast('success', `Byenvini ${artist.stageName}! Ou konekte nan Espas Atis ou.`);
   };
 
-  const handleArtistRegister = async (newArtist: ArtistUser) => {
-    StorageService.saveArtist(newArtist);
-    setArtists(StorageService.getArtists());
-    try {
-      await HostingerService.saveSingleArtist(newArtist);
-      await UpMizikAPI.registerArtist(newArtist);
-      HostingerService.fetchArtistsAndNotify(true).catch(() => {});
-    } catch (err) {
-      console.warn('Registration server sync warn:', err);
+  const handleArtistRegister = async (newArtist: ArtistUser): Promise<{ success: boolean; message?: string }> => {
+    // Verifikasyon anvan anrejistreman an pou tcheke si imèl la deja egziste nan baz done atis yo
+    const cleanEmail = (newArtist.email || '').trim().toLowerCase();
+    const existingArtistsList = StorageService.getArtists();
+    const isEmailAlreadyTaken = 
+      existingArtistsList.some(a => a.id !== newArtist.id && (a.email || '').trim().toLowerCase() === cleanEmail) ||
+      artists.some(a => a.id !== newArtist.id && (a.email || '').trim().toLowerCase() === cleanEmail);
+
+    if (isEmailAlreadyTaken) {
+      const errorMsg = 'Imèl sa a deja itilize sou yon lòt kont atis';
+      addToast('error', errorMsg);
+      return { success: false, message: errorMsg };
     }
-    addToast('success', `Kont ou kreye avèk siksè! Prèv $4.99 la voye bay Admin.`);
-    // Alèt admin: SÈLMAN pou currentAdmin, li p ap janm parèt pou atis oswa itilizatè piblik
-    addToast('info', `🔔 Nouvo atis "${newArtist.stageName}" an atant validasyon nan panèl Admin an.`, 'admin');
+
+    try {
+      const saveRes = await HostingerService.saveSingleArtist(newArtist);
+      if (saveRes && !saveRes.success) {
+        const errorMsg = saveRes.message || 'Imèl sa a deja itilize sou yon lòt kont atis';
+        addToast('error', errorMsg);
+        return { success: false, message: errorMsg };
+      }
+      StorageService.saveArtist(newArtist);
+      setArtists(StorageService.getArtists());
+      HostingerService.fetchArtistsAndNotify(true).catch(() => {});
+      const feeUsd = newArtist.registrationFeeUsd ?? 4.99;
+      addToast('success', `Kont ou kreye avèk siksè! Prèv $${feeUsd.toFixed(2)} la voye bay Admin.`);
+      // Alèt admin: SÈLMAN pou currentAdmin, li p ap janm parèt pou atis oswa itilizatè piblik
+      addToast('info', `🔔 Nouvo atis "${newArtist.stageName}" an atant validasyon nan panèl Admin an.`, 'admin');
+      return { success: true };
+    } catch (err: any) {
+      console.warn('Registration server sync warn:', err);
+      return { success: false, message: 'Erè pandan anrejistreman an.' };
+    }
   };
 
   const handleAdminLoginSuccess = (admin: AdminUser) => {

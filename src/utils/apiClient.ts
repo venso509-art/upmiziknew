@@ -3,7 +3,7 @@
  */
 
 import { MusicItem, ArtistUser, DonationItem, MusicCategory, ReleaseFormat } from '../types';
-import { resolveMediaUrl } from './imageUtils';
+import { resolveMediaUrl, DEFAULT_ARTIST_AVATAR, DEFAULT_SONG_COVER } from './imageUtils';
 
 export const API_BASE_URL = typeof window !== 'undefined' ? '/api.php' : 'api.php';
 
@@ -230,7 +230,7 @@ function mapDbArtistToModel(row: any): ArtistUser {
     phone: row.telephone,
     city: row.ville,
     pin: row.pin,
-    avatarUrl: resolveMediaUrl(row.avatar_url, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'),
+    avatarUrl: resolveMediaUrl(row.avatar_url, DEFAULT_ARTIST_AVATAR),
     bio: row.bio || '',
     musicalRoots: row.racines_musicales,
     musicalInfluences: row.influences,
@@ -289,7 +289,7 @@ function mapDbMusicToModel(row: any): MusicItem {
     releaseFormat: (row.format || 'single') as ReleaseFormat,
     albumName: row.nom_album,
     trackNumber: Number(row.numero_piste || 1),
-    coverUrl: resolveMediaUrl(row.cover_url, 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80'),
+    coverUrl: resolveMediaUrl(row.cover_url, DEFAULT_SONG_COVER),
     audioUrl: resolveMediaUrl(row.audio_url),
     duration: Number(row.duree || 180),
     listens: Number(row.ecoutes || 0),

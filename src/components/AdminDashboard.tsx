@@ -811,7 +811,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Real-time Firestore onSnapshot Subscriptions for Artists and Donations
   React.useEffect(() => {
-    if (!currentAdmin || !currentAdmin.email || currentAdmin.role !== 'super_admin') {
+    if (!currentAdmin || !currentAdmin.email || (currentAdmin.role !== 'super_admin' && currentAdmin.role !== 'admin')) {
       clearAllLiveNotifications();
       return;
     }
@@ -1073,9 +1073,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     return baseList.map(a => {
       let finalArt = { ...a };
+      const rawStatus = String(finalArt.status || (finalArt as any).statut || 'pending').toLowerCase();
+      if (rawStatus === 'en_attente' || rawStatus === 'pending') finalArt.status = 'pending';
+      else if (rawStatus === 'actif' || rawStatus === 'active') finalArt.status = 'active';
+      else if (rawStatus === 'rejete' || rawStatus === 'rejected') finalArt.status = 'rejected';
+      else if (rawStatus === 'suspendu' || rawStatus === 'suspended') finalArt.status = 'suspended';
+      else finalArt.status = rawStatus as any;
+
       const propArt = propMap.get(a.id);
-      if (propArt && propArt.status && propArt.status !== 'pending') {
-        finalArt.status = propArt.status;
+      if (propArt && propArt.status) {
+        const propStatus = String(propArt.status || (propArt as any).statut || '').toLowerCase();
+        if (propStatus === 'active' || propStatus === 'actif') finalArt.status = 'active';
+        else if (propStatus === 'rejected' || propStatus === 'rejete') finalArt.status = 'rejected';
+        else if (propStatus === 'suspended' || propStatus === 'suspendu') finalArt.status = 'suspended';
         if (propArt.registrationRejectionReason) {
           finalArt.registrationRejectionReason = propArt.registrationRejectionReason;
         }
@@ -1295,7 +1305,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Strict Authorization & Role Check
   const isAuthorizedSuperAdmin = Boolean(
     currentAdmin &&
-    currentAdmin.role === 'super_admin'
+    (currentAdmin.role === 'super_admin' || currentAdmin.role === 'admin' || (currentAdmin as any).role === 'administratè')
   );
 
   if (!isAuthorizedSuperAdmin) {
@@ -1327,12 +1337,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setProofModalDetails(details || null);
   };
 
+  const isPendingArtist = (a: ArtistUser) => {
+    const s = String(a.status || (a as any).statut || '').toLowerCase();
+    return s === 'pending' || s === 'en_attente';
+  };
+  const isActiveArtist = (a: ArtistUser) => {
+    const s = String(a.status || (a as any).statut || '').toLowerCase();
+    return s === 'active' || s === 'actif' || !s;
+  };
+  const isRejectedArtist = (a: ArtistUser) => {
+    const s = String(a.status || (a as any).statut || '').toLowerCase();
+    return s === 'rejected' || s === 'rejete';
+  };
+  const isSuspendedArtist = (a: ArtistUser) => {
+    const s = String(a.status || (a as any).statut || '').toLowerCase();
+    return s === 'suspended' || s === 'suspendu' || s === 'sispann';
+  };
+
   const pendingDonations = effectiveDonations.filter(d => d.status === 'pending');
   const validatedDonations = effectiveDonations.filter(d => d.status === 'validated');
   const rejectedDonations = effectiveDonations.filter(d => d.status === 'rejected');
-  const pendingArtists = effectiveArtists.filter(a => a.status === 'pending');
-  const activeArtists = effectiveArtists.filter(a => a.status === 'active' || !a.status);
-  const rejectedArtists = effectiveArtists.filter(a => a.status === 'rejected');
+  const pendingArtists = effectiveArtists.filter(isPendingArtist);
+  const activeArtists = effectiveArtists.filter(isActiveArtist);
+  const rejectedArtists = effectiveArtists.filter(isRejectedArtist);
 
   // Financial calculations in USD
   const totalGrossDonations = musicList.reduce((acc, m) => acc + (m.totalDonations || 0), 0);
@@ -4329,10 +4356,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* VIEW 3: VALIDATION & INTEGRATION DEMANDS FOR ARTISTS */}
       {activeTab === 'artists_pending' && (() => {
-        const pendingList = effectiveArtists.filter(a => a.status === 'pending');
-        const activeList = effectiveArtists.filter(a => a.status === 'active' || !a.status);
-        const rejectedList = effectiveArtists.filter(a => a.status === 'rejected');
-        const suspendedList = effectiveArtists.filter(a => a.status === 'suspended');
+        const pendingList = effectiveArtists.filter(isPendingArtist);
+        const activeList = effectiveArtists.filter(isActiveArtist);
+        const rejectedList = effectiveArtists.filter(isRejectedArtist);
+        const suspendedList = effectiveArtists.filter(isSuspendedArtist);
 
         let displayedList = effectiveArtists;
         if (artistValidationFilter === 'pending') {

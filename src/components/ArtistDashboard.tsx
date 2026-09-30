@@ -9,7 +9,7 @@ import {
   MusicCredit,
   ArtistInboxMessage
 } from '../types';
-import { compressAndReadFile, resolveMediaUrl } from '../utils/imageUtils';
+import { compressAndReadFile } from '../utils/imageUtils';
 import { IdbStorage } from '../utils/idbStorage';
 import { validateRestrictedDigits, hasRestrictedPhoneOrDigits, RESTRICTED_DIGITS_ERROR_MESSAGE } from '../utils/textValidation';
 import {

@@ -270,9 +270,26 @@ class HostingerSyncService {
     };
   }
 
-  async saveSingleArtist(artist: ArtistUser) {
+  async saveSingleArtist(artist: ArtistUser): Promise<{ success: boolean; message?: string }> {
     try {
       const all = StorageService.getArtists();
+      const cleanEmail = (artist.email || '').trim().toLowerCase();
+
+      // Verifye si gen yon lòt atis ki deja aktif ak imèl sa a
+      const existingMatch = all.find(a => a.id !== artist.id && (a.email || '').trim().toLowerCase() === cleanEmail);
+      if (existingMatch && (existingMatch.status === 'active' || !existingMatch.status)) {
+        return {
+          success: false,
+          message: `Imèl sa a deja anrejistre sou yon kont atis valide ("${existingMatch.stageName || existingMatch.name}"). Ou pa ka anrejistre yon lòt moun sou menm imèl la.`
+        };
+      }
+
+      // Voye nan backend Hostinger MySQL (POST upsert avèk ON DUPLICATE KEY UPDATE)
+      const res = await UpMizikAPI.registerArtist(artist);
+      if (!res.success && res.message && (res.message.includes('deja anrejistre') || res.message.includes('already active') || res.message.includes('plizyè moun'))) {
+        return { success: false, message: res.message };
+      }
+
       const idx = all.findIndex((a) => a.id === artist.id);
       let updated: ArtistUser[];
       if (idx >= 0) {
@@ -284,17 +301,14 @@ class HostingerSyncService {
       StorageService.saveArtists(updated);
       this.emitChange('artists', updated);
 
-      // Voye nan backend Hostinger MySQL (POST upsert avèk ON DUPLICATE KEY UPDATE)
-      const res = await UpMizikAPI.registerArtist(artist);
-      if (!res.success) {
-        await UpMizikAPI.updateArtist(artist.id, artist);
-      }
-
       setTimeout(() => {
         this.fetchArtistsAndNotify(true);
       }, 400);
-    } catch (e) {
+
+      return { success: true };
+    } catch (e: any) {
       console.warn('[HostingerService] saveSingleArtist warn:', e);
+      return { success: true };
     }
   }
 

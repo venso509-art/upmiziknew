@@ -1,8 +1,10 @@
+import type { SyntheticEvent } from 'react';
+
 /**
  * Utility to process uploaded proof photos / album covers / avatars into persistent Base64 Data URLs
  * Compresses images aggressively so they fit comfortably in local storage while retaining crisp quality.
  */
-export async function compressAndReadFile(file: File, maxWidth = 720, maxHeight = 960, quality = 0.75): Promise<string> {
+export async function compressAndReadFile(file: File, maxWidth = 600, maxHeight = 800, quality = 0.65): Promise<string> {
   return new Promise((resolve) => {
     // If it's not an image, read directly as data URL
     if (!file.type.startsWith('image/')) {
@@ -78,7 +80,7 @@ export const DEFAULT_HEADER_BANNER = "data:image/svg+xml,%3Csvg xmlns='http://ww
  * Prevents broken image icons and browser console spam.
  */
 export function handleImageError(
-  event: React.SyntheticEvent<HTMLImageElement, Event>,
+  event: SyntheticEvent<HTMLImageElement, Event>,
   fallback: string = DEFAULT_ARTIST_AVATAR
 ): void {
   const target = event.currentTarget;
