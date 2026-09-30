@@ -1,12 +1,38 @@
-# UpMizik - Security Protection for Uploads Directory
-# Bloke ekzekisyon tout script PHP, CGI, Python, Shell elatriye
+# ==========================================================
+# UpMizik - Uploads Directory Configuration & Security (Apache 2.4+)
+# ==========================================================
 
-<FilesMatch "\.(php|phtml|php3|php4|php5|php7|phps|cgi|pl|py|sh|exe|bat|cmd)$">
-    Order Deny,Allow
-    Deny from all
-</FilesMatch>
+# 1. Pèmèt CORS pou tout imaj, odyo ak medya yo ka chaje san blokaj sou okenn aparèy
+<IfModule mod_headers.c>
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
+    Header set Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Range"
+    Header set Timing-Allow-Origin "*"
+    # Cache pou vitès maksimòm sou telefòn
+    Header set Cache-Control "public, max-age=2592000, immutable"
+</IfModule>
 
-# Enfim PHP engine
+# 2. Otorize fichye medya yo sèlman (Imaj, Odyo, Dokiman)
+<IfModule mod_authz_core.c>
+    <FilesMatch "\.(jpg|jpeg|png|gif|webp|svg|mp3|wav|ogg|aac|m4a|flac|pdf)$">
+        Require all granted
+    </FilesMatch>
+
+    # Bloke tout kòd PHP, script oswa fichye egzekitab pou sekirite sèvè a
+    <FilesMatch "\.(php|phtml|php3|php4|php5|php7|php8|phps|cgi|pl|py|sh|exe|bat|cmd|htaccess|env)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+# Fallback pou konpatibilite si mod_authz_core pa prezan
+<IfModule !mod_authz_core.c>
+    <FilesMatch "\.(php|phtml|php3|php4|php5|php7|php8|phps|cgi|pl|py|sh|exe|bat|cmd|htaccess|env)$">
+        Order Deny,Allow
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+# 3. Enfim PHP engine nèt nan dosye uploads la
 <IfModule mod_php7.c>
     php_flag engine off
 </IfModule>

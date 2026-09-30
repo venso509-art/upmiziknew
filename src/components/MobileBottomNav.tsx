@@ -9,6 +9,7 @@ import {
   Moon
 } from 'lucide-react';
 import { ActiveView, ArtistUser, AdminUser, ThemeMode } from '../types';
+import { resolveMediaUrl, handleImageError, DEFAULT_ARTIST_AVATAR } from '../utils/imageUtils';
 
 interface MobileBottomNavProps {
   currentView: ActiveView;
@@ -95,9 +96,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           {currentArtist ? (
             <div className="relative">
               <img
-                src={currentArtist.avatarUrl}
+                src={resolveMediaUrl(currentArtist.avatarUrl, DEFAULT_ARTIST_AVATAR)}
                 alt={currentArtist.stageName}
                 className="w-5 h-5 rounded-full object-cover border border-yellow-400"
+                onError={(e) => handleImageError(e, DEFAULT_ARTIST_AVATAR)}
               />
               <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border border-black"></span>
             </div>

@@ -61,7 +61,7 @@ if (!empty($data['artists']) && is_array($data['artists'])) {
             $a['phone'] ?? '',
             $a['city'] ?? 'Pòtoprens',
             $a['pin'] ?? '0000',
-            $a['avatarUrl'] ?? '',
+            $a['avatarUrl'] ?? $a['avatar'] ?? $a['avatar_url'] ?? '',
             $a['bio'] ?? '',
             $a['musicalRoots'] ?? null,
             $a['musicalInfluences'] ?? null,

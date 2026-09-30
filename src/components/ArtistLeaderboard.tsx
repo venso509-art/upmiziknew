@@ -25,6 +25,7 @@ import {
 import { ArtistUser, MusicItem, MusicCategory } from '../types';
 import { ArtistBadge } from './ArtistBadge';
 import { getArtistBadgeInfo } from '../utils/badgeSystem';
+import { resolveMediaUrl, handleImageError, DEFAULT_ARTIST_AVATAR } from '../utils/imageUtils';
 
 interface ArtistLeaderboardProps {
   artists: ArtistUser[];
@@ -196,7 +197,12 @@ export const ArtistLeaderboard: React.FC<ArtistLeaderboardProps> = ({
             <div>
               <div className="flex items-center gap-4 mt-2 mb-4">
                 <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border-2 border-slate-300 shadow-md shrink-0 bg-black">
-                  <img src={top2.artist.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80'} alt={top2.artist.stageName} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                  <img
+                    src={resolveMediaUrl(top2.artist.avatarUrl, DEFAULT_ARTIST_AVATAR)}
+                    alt={top2.artist.stageName}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    onError={(e) => handleImageError(e, DEFAULT_ARTIST_AVATAR)}
+                  />
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-lg sm:text-xl font-black text-white truncate flex items-center gap-1.5 flex-wrap">
@@ -296,7 +302,12 @@ export const ArtistLeaderboard: React.FC<ArtistLeaderboardProps> = ({
             <div>
               <div className="flex flex-col items-center text-center mt-3 mb-4">
                 <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-3xl overflow-hidden border-4 border-yellow-400 shadow-2xl shadow-yellow-400/20 mb-3 bg-black">
-                  <img src={top1.artist.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80'} alt={top1.artist.stageName} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                  <img
+                    src={resolveMediaUrl(top1.artist.avatarUrl, DEFAULT_ARTIST_AVATAR)}
+                    alt={top1.artist.stageName}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    onError={(e) => handleImageError(e, DEFAULT_ARTIST_AVATAR)}
+                  />
                   <div className="absolute bottom-0 inset-x-0 bg-yellow-400 text-slate-950 text-[10px] font-black uppercase py-0.5">
                     Top 1
                   </div>
@@ -393,7 +404,12 @@ export const ArtistLeaderboard: React.FC<ArtistLeaderboardProps> = ({
             <div>
               <div className="flex items-center gap-4 mt-2 mb-4">
                 <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border-2 border-amber-600 shadow-md shrink-0 bg-black">
-                  <img src={top3.artist.avatarUrl || 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=300&auto=format&fit=crop&q=80'} alt={top3.artist.stageName} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                  <img
+                    src={resolveMediaUrl(top3.artist.avatarUrl, DEFAULT_ARTIST_AVATAR)}
+                    alt={top3.artist.stageName}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    onError={(e) => handleImageError(e, DEFAULT_ARTIST_AVATAR)}
+                  />
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-lg sm:text-xl font-black text-white truncate flex items-center gap-1.5 flex-wrap">
@@ -564,9 +580,10 @@ export const ArtistLeaderboard: React.FC<ArtistLeaderboardProps> = ({
                       className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden border border-white/[0.1] bg-black shrink-0 cursor-pointer group"
                     >
                       <img
-                        src={item.artist.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80'}
+                        src={resolveMediaUrl(item.artist.avatarUrl, DEFAULT_ARTIST_AVATAR)}
                         alt={item.artist.stageName || 'Atis'}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                        onError={(e) => handleImageError(e, DEFAULT_ARTIST_AVATAR)}
                       />
                     </div>
 

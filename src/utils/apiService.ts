@@ -6,6 +6,7 @@
  */
 
 import { ArtistUser, MusicItem, DonationItem, ArtistInboxMessage, SocialPost, PubItem, RpaItem, PaymentSettingsConfig } from '../types';
+import { resolveMediaUrl } from './imageUtils';
 
 // API Base URL:
 // Sèvi ak chemen relatif /backend/api lè n ap kouri sou upmizik.com, sou IP VPS la, oswa localhost.
@@ -101,7 +102,13 @@ class ApiService {
       const res = await fetch(url);
       const data = await res.json();
       const list = data.artists || data.data?.artists;
-      return Array.isArray(list) ? list : [];
+      if (!Array.isArray(list)) return [];
+      return list.map((a: ArtistUser) => ({
+        ...a,
+        avatarUrl: resolveMediaUrl(a.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'),
+        registrationProofUrl: a.registrationProofUrl ? resolveMediaUrl(a.registrationProofUrl) : undefined,
+        headerBannerUrl: a.headerBannerUrl ? resolveMediaUrl(a.headerBannerUrl) : undefined,
+      }));
     } catch {
       return [];
     }
@@ -166,7 +173,12 @@ class ApiService {
       const res = await fetch(`${this.baseUrl}/musics.php?${query.toString()}`);
       const data = await res.json();
       const list = data.musics || data.data?.musics;
-      return Array.isArray(list) ? list : [];
+      if (!Array.isArray(list)) return [];
+      return list.map((m: MusicItem) => ({
+        ...m,
+        coverUrl: resolveMediaUrl(m.coverUrl, 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80'),
+        audioUrl: resolveMediaUrl(m.audioUrl),
+      }));
     } catch {
       return [];
     }

@@ -27,6 +27,11 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $type = $_POST['type'] ?? $_GET['type'] ?? 'general';
+// Map aliases
+if ($type === 'avatar') $type = 'avatars';
+if ($type === 'cover') $type = 'covers';
+if ($type === 'proof') $type = 'proofs';
+if ($type === 'banner') $type = 'banners';
 $targetSubfolder = in_array($type, $folders) ? $type : 'general';
 $targetDir = $baseUploadDir . '/' . $targetSubfolder;
 
@@ -94,6 +99,9 @@ if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
     if (move_uploaded_file($tmpPath, $destination)) {
         $relativePath = '/backend/uploads/' . $targetSubfolder . '/' . $uniqueFileName;
         $fullUrl = rtrim(SITE_URL, '/') . $relativePath;
+        if (str_contains($fullUrl, 'http://upmizik.com') || str_contains($fullUrl, 'http://www.upmizik.com')) {
+            $fullUrl = str_replace('http://', 'https://', $fullUrl);
+        }
 
         jsonResponse([
             'success' => true,
@@ -124,6 +132,17 @@ if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
 // 2. UPLOAD BASE64 (DATA URI)
 $json = getJsonInput();
 if (!empty($json['base64Data'])) {
+    if (!empty($json['type'])) {
+        $jsonType = $json['type'];
+        if ($jsonType === 'avatar') $jsonType = 'avatars';
+        if ($jsonType === 'cover') $jsonType = 'covers';
+        if ($jsonType === 'proof') $jsonType = 'proofs';
+        if ($jsonType === 'banner') $jsonType = 'banners';
+        if (in_array($jsonType, $folders)) {
+            $targetSubfolder = $jsonType;
+            $targetDir = $baseUploadDir . '/' . $targetSubfolder;
+        }
+    }
     $dataUri = $json['base64Data'];
     if (preg_match('/^data:(image\/(\w+)|audio\/(\w+)|application\/pdf);base64,/', $dataUri, $typeMatch)) {
         $dataWithoutHeader = substr($dataUri, strpos($dataUri, ',') + 1);
@@ -141,6 +160,9 @@ if (!empty($json['base64Data'])) {
         if (file_put_contents($destination, $decoded)) {
             $relativePath = '/backend/uploads/' . $targetSubfolder . '/' . $uniqueFileName;
             $fullUrl = rtrim(SITE_URL, '/') . $relativePath;
+            if (str_contains($fullUrl, 'http://upmizik.com') || str_contains($fullUrl, 'http://www.upmizik.com')) {
+                $fullUrl = str_replace('http://', 'https://', $fullUrl);
+            }
 
             jsonResponse([
                 'success' => true,

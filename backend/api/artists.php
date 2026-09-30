@@ -49,6 +49,7 @@ if ($method === 'GET') {
                 ville AS city,
                 pin,
                 avatar_url AS avatarUrl,
+                avatar_url AS avatar,
                 bio,
                 racines_musicales AS musicalRoots,
                 influences AS musicalInfluences,
@@ -137,6 +138,7 @@ if ($method === 'GET') {
                 ville AS city,
                 pin,
                 avatar_url AS avatarUrl,
+                avatar_url AS avatar,
                 bio,
                 racines_musicales AS musicalRoots,
                 influences AS musicalInfluences,
@@ -212,7 +214,7 @@ if ($method === 'POST') {
     $phone = trim($data['phone']);
     $city = $data['city'] ?? 'Pòtoprens';
     $pin = !empty($data['pin']) ? (strlen($data['pin']) === 60 ? $data['pin'] : password_hash($data['pin'], PASSWORD_BCRYPT, ['cost' => 10])) : password_hash('0000', PASSWORD_BCRYPT, ['cost' => 10]);
-    $avatarUrl = $data['avatarUrl'] ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80';
+    $avatarUrl = $data['avatarUrl'] ?? $data['avatar'] ?? $data['avatar_url'] ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80';
     $registrationProofUrl = $data['registrationProofUrl'] ?? null;
 
     // Otomatikman konvèti prèv enskripsyon base64 soti sou telefòn pou l vin yon fichye fizik
@@ -343,6 +345,8 @@ if ($method === 'PUT' || $method === 'PATCH') {
         'phone' => 'telephone',
         'city' => 'ville',
         'avatarUrl' => 'avatar_url',
+        'avatar' => 'avatar_url',
+        'avatar_url' => 'avatar_url',
         'bio' => 'bio',
         'musicalRoots' => 'racines_musicales',
         'musicalInfluences' => 'influences',
@@ -399,7 +403,7 @@ if ($method === 'PUT' || $method === 'PATCH') {
             $insPin = !empty($data['pin']) ? (strlen($data['pin']) === 60 ? $data['pin'] : password_hash($data['pin'], PASSWORD_BCRYPT, ['cost' => 10])) : password_hash('0000', PASSWORD_BCRYPT, ['cost' => 10]);
             $insStatut = mapStatusToDb($data['status'] ?? 'en_attente');
             $insProof = $data['registrationProofUrl'] ?? null;
-            $insAvatar = $data['avatarUrl'] ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80';
+            $insAvatar = $data['avatarUrl'] ?? $data['avatar'] ?? $data['avatar_url'] ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80';
             
             $insStmt = $pdo->prepare("
                 INSERT INTO artistes (id, nom_complet, nom_scene, email, telephone, ville, pin, avatar_url, statut, preuve_inscription_url, date_inscription)

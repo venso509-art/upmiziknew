@@ -20,6 +20,12 @@ import {
 import { MusicItem, ArtistUser, MusicCategory } from '../types';
 import { getArtistBadgeInfo, calculateArtistTotalDonations } from '../utils/badgeSystem';
 import { VoiceSearchModal } from './VoiceSearchModal';
+import {
+  resolveMediaUrl,
+  handleImageError,
+  DEFAULT_ARTIST_AVATAR,
+  DEFAULT_SONG_COVER
+} from '../utils/imageUtils';
 
 interface LiveSearchBarProps {
   searchQuery: string;
@@ -434,9 +440,10 @@ export const LiveSearchBar: React.FC<LiveSearchBarProps> = ({
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="relative w-10 h-10 rounded-xl overflow-hidden shrink-0 border border-white/[0.1] bg-black">
                               <img
-                                src={artist.avatarUrl}
+                                src={resolveMediaUrl(artist.avatarUrl, DEFAULT_ARTIST_AVATAR)}
                                 alt={artist.stageName}
                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                onError={(e) => handleImageError(e, DEFAULT_ARTIST_AVATAR)}
                               />
                               {artist.status === 'active' && (
                                 <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-blue-500 rounded-full border border-black" />
@@ -513,12 +520,10 @@ export const LiveSearchBar: React.FC<LiveSearchBarProps> = ({
                           >
                             <div className="relative w-10 h-10 rounded-xl overflow-hidden shrink-0 border border-white/[0.1] bg-black">
                               <img
-                                src={song.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80'}
+                                src={resolveMediaUrl(song.coverUrl, DEFAULT_SONG_COVER)}
                                 alt={song.title}
                                 className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80';
-                                }}
+                                onError={(e) => handleImageError(e, DEFAULT_SONG_COVER)}
                               />
                               <button
                                 type="button"

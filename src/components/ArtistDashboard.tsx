@@ -9,7 +9,7 @@ import {
   MusicCredit,
   ArtistInboxMessage
 } from '../types';
-import { compressAndReadFile } from '../utils/imageUtils';
+import { compressAndReadFile, resolveMediaUrl } from '../utils/imageUtils';
 import { IdbStorage } from '../utils/idbStorage';
 import { validateRestrictedDigits, hasRestrictedPhoneOrDigits, RESTRICTED_DIGITS_ERROR_MESSAGE } from '../utils/textValidation';
 import {
@@ -80,6 +80,13 @@ import { getAudioDuration } from '../utils/audioEngine';
 import { Pencil, Trash2, Trophy } from 'lucide-react';
 import { ArtistAwardsShowcase } from './ArtistAwardsShowcase';
 import { calculateArtistAwards } from '../utils/awardsUtils';
+import {
+  resolveMediaUrl,
+  handleImageError,
+  DEFAULT_ARTIST_AVATAR,
+  DEFAULT_SONG_COVER,
+  DEFAULT_HEADER_BANNER
+} from '../utils/imageUtils';
 
 interface ArtistDashboardProps {
   currentArtist: ArtistUser;
@@ -244,7 +251,7 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
         try {
           const res = await UpMizikAPI.uploadFile(file, 'avatars');
           if (res && res.url) {
-            finalUrl = res.url;
+            finalUrl = resolveMediaUrl(res.url);
             setEditAvatarPreview(finalUrl);
           }
         } catch (uploadErr) {
@@ -777,10 +784,11 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
         {currentBannerUrl && (
           <div className="absolute inset-0 z-0">
             <img
-              src={currentBannerUrl}
+              src={resolveMediaUrl(currentBannerUrl, DEFAULT_HEADER_BANNER)}
               alt=""
               className="w-full h-full object-cover opacity-25 filter blur-[1px]"
               referrerPolicy="no-referrer"
+              onError={(e) => handleImageError(e, DEFAULT_HEADER_BANNER)}
             />
             <div className="absolute inset-0 bg-gradient-to-r from-[#0a0f1d] via-[#0a0f1d]/80 to-[#0a0f1d]/90" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1d] via-transparent to-black/40" />
@@ -791,9 +799,10 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
           <div className="flex items-center gap-5">
             <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-yellow-400 shadow-xl bg-black shrink-0 group">
               <img
-                src={editAvatarPreview || currentArtist.avatarUrl}
+                src={resolveMediaUrl(editAvatarPreview || currentArtist.avatarUrl, DEFAULT_ARTIST_AVATAR)}
                 alt={currentArtist.stageName}
                 className="w-full h-full object-cover"
+                onError={(e) => handleImageError(e, DEFAULT_ARTIST_AVATAR)}
               />
               <button
                 type="button"
@@ -1158,9 +1167,10 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
                 <div className="space-y-4">
                   <div className="flex items-center gap-3.5">
                     <img
-                      src={editAvatarPreview || currentArtist.avatarUrl}
+                      src={resolveMediaUrl(editAvatarPreview || currentArtist.avatarUrl, DEFAULT_ARTIST_AVATAR)}
                       alt={currentArtist.stageName}
                       className="w-16 h-16 rounded-2xl object-cover border-2 border-white/20 shadow-xl"
+                      onError={(e) => handleImageError(e, DEFAULT_ARTIST_AVATAR)}
                     />
                     <div>
                       <h4 className="text-base font-black text-white">{currentArtist.stageName}</h4>
@@ -1248,9 +1258,10 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
                 <div className="p-4 rounded-2xl bg-[#05070a] border border-white/[0.1] flex flex-col sm:flex-row items-center gap-4">
                   <div className="relative w-20 h-20 rounded-2xl overflow-hidden border-2 border-cyan-500/50 shadow-lg bg-black shrink-0">
                     <img
-                      src={editAvatarPreview || currentArtist.avatarUrl}
+                      src={resolveMediaUrl(editAvatarPreview || currentArtist.avatarUrl, DEFAULT_ARTIST_AVATAR)}
                       alt={currentArtist.stageName}
                       className="w-full h-full object-cover"
+                      onError={(e) => handleImageError(e, DEFAULT_ARTIST_AVATAR)}
                     />
                     {isUploadingAvatar && (
                       <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
@@ -1764,9 +1775,10 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
                     ) : (
                       <div className="relative w-full h-full">
                         <img
-                          src={mediaSource || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80'}
+                          src={resolveMediaUrl(mediaSource, DEFAULT_SONG_COVER)}
                           alt={item.artistName}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          onError={(e) => handleImageError(e, DEFAULT_SONG_COVER)}
                         />
                         {isGif && (
                           <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-purple-600/80 backdrop-blur-sm text-[8px] text-white font-bold flex items-center gap-1">
@@ -1918,12 +1930,10 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-3">
                             <img
-                              src={song.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80'}
+                              src={resolveMediaUrl(song.coverUrl, DEFAULT_SONG_COVER)}
                               alt={song.title}
                               className="w-10 h-10 rounded-lg object-cover border border-white/[0.08]"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80';
-                              }}
+                              onError={(e) => handleImageError(e, DEFAULT_SONG_COVER)}
                             />
                             <div className="space-y-1">
                               <p className="font-bold text-white text-sm">{song.title}</p>
@@ -2348,9 +2358,10 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
                   return (
                     <div className="flex items-center gap-3 p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20">
                       <img
-                        src={selectedArtist.avatarUrl}
+                        src={resolveMediaUrl(selectedArtist.avatarUrl, DEFAULT_ARTIST_AVATAR)}
                         alt={selectedArtist.stageName}
                         className="w-10 h-10 rounded-full object-cover border border-purple-400"
+                        onError={(e) => handleImageError(e, DEFAULT_ARTIST_AVATAR)}
                       />
                       <div className="flex-1 min-w-0 text-xs">
                         <div className="flex items-center gap-1">
@@ -2390,7 +2401,12 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
                     className="text-xs text-slate-400 file:py-1.5 file:px-3 file:rounded-xl file:bg-white/[0.08] file:text-white file:border-0 hover:file:bg-white/[0.12] cursor-pointer"
                   />
                   {coverPreview && (
-                    <img src={coverPreview} alt="Cover" className="w-10 h-10 rounded-lg object-cover border border-blue-500" />
+                    <img
+                      src={resolveMediaUrl(coverPreview, DEFAULT_SONG_COVER)}
+                      alt="Cover"
+                      className="w-10 h-10 rounded-lg object-cover border border-blue-500"
+                      onError={(e) => handleImageError(e, DEFAULT_SONG_COVER)}
+                    />
                   )}
                 </div>
               </div>
@@ -2748,7 +2764,12 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
                     className="text-xs text-slate-400 file:py-1.5 file:px-3 file:rounded-xl file:bg-white/[0.08] file:text-white file:border-0 hover:file:bg-white/[0.12] cursor-pointer"
                   />
                   {editCoverPreview && (
-                    <img src={editCoverPreview} alt="Cover" className="w-10 h-10 rounded-lg object-cover border border-blue-500" />
+                    <img
+                      src={resolveMediaUrl(editCoverPreview, DEFAULT_SONG_COVER)}
+                      alt="Cover"
+                      className="w-10 h-10 rounded-lg object-cover border border-blue-500"
+                      onError={(e) => handleImageError(e, DEFAULT_SONG_COVER)}
+                    />
                   )}
                 </div>
               </div>

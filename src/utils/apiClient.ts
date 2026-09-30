@@ -3,6 +3,7 @@
  */
 
 import { MusicItem, ArtistUser, DonationItem, MusicCategory, ReleaseFormat } from '../types';
+import { resolveMediaUrl } from './imageUtils';
 
 export const API_BASE_URL = typeof window !== 'undefined' ? '/api.php' : 'api.php';
 
@@ -229,14 +230,14 @@ function mapDbArtistToModel(row: any): ArtistUser {
     phone: row.telephone,
     city: row.ville,
     pin: row.pin,
-    avatarUrl: row.avatar_url,
+    avatarUrl: resolveMediaUrl(row.avatar_url, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'),
     bio: row.bio || '',
     musicalRoots: row.racines_musicales,
     musicalInfluences: row.influences,
     artisticVision: row.vision_artistique,
     artistQuote: row.citation,
     status: (row.statut === 'actif' ? 'active' : row.statut === 'rejete' ? 'rejected' : row.statut === 'suspendu' ? 'suspended' : 'pending') as any,
-    registrationProofUrl: row.preuve_inscription_url,
+    registrationProofUrl: row.preuve_inscription_url ? resolveMediaUrl(row.preuve_inscription_url) : undefined,
     registrationRejectionReason: row.raison_rejet,
     registrationDate: row.date_inscription || new Date().toISOString(),
     totalListens: Number(row.total_ecoutes || 0),
@@ -244,7 +245,7 @@ function mapDbArtistToModel(row: any): ArtistUser {
     youtubeUrl: row.youtube_url,
     instagramUrl: row.instagram_url,
     tiktokUrl: row.tiktok_url,
-    headerBannerUrl: row.banniere_url,
+    headerBannerUrl: row.banniere_url ? resolveMediaUrl(row.banniere_url) : undefined,
     bannerGenreTheme: row.theme_banniere,
     isPaidThisMonth: Boolean(Number(row.paye_ce_mois || 0)),
     paidDateThisMonth: row.date_paiement,
@@ -288,8 +289,8 @@ function mapDbMusicToModel(row: any): MusicItem {
     releaseFormat: (row.format || 'single') as ReleaseFormat,
     albumName: row.nom_album,
     trackNumber: Number(row.numero_piste || 1),
-    coverUrl: row.cover_url,
-    audioUrl: row.audio_url,
+    coverUrl: resolveMediaUrl(row.cover_url, 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80'),
+    audioUrl: resolveMediaUrl(row.audio_url),
     duration: Number(row.duree || 180),
     listens: Number(row.ecoutes || 0),
     totalDonations: Number(row.total_dons || 0),

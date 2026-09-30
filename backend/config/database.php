@@ -51,7 +51,9 @@ if (!defined('DB_PORT')) define('DB_PORT', $rawPort);
 if (!defined('DB_NAME')) define('DB_NAME', $rawName);
 if (!defined('DB_USER')) define('DB_USER', $rawUser);
 if (!defined('DB_PASS')) define('DB_PASS', $rawPass);
-$isHttps = (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https') || (isset($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) === 'on');
+$isHttps = (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
+    || (isset($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) === 'on')
+    || (isset($_SERVER['HTTP_HOST']) && (str_contains($_SERVER['HTTP_HOST'], 'upmizik.com') || str_contains($_SERVER['HTTP_HOST'], 'run.app')));
 if (!defined('SITE_URL')) define('SITE_URL', rtrim(env('SITE_URL', ($isHttps ? "https" : "http") . "://" . ($_SERVER['HTTP_HOST'] ?? 'localhost')), '/'));
 
 if (!function_exists('getDBConnection')) {
@@ -238,7 +240,31 @@ if (!function_exists('getDBConnection')) {
             }
         } catch (Throwable $ignore) {}
 
-        // Silent schema resilience: Asire kolòn imaj ak prèv yo se LONGTEXT (pou evite erè 'Data too long' sou telefòn)
+        // Silent schema resilience: Asire kolòn imaj ak prèv yo egziste epi yo se LONGTEXT
+        try {
+            $cols = $pdo->query("SHOW COLUMNS FROM `artistes` LIKE 'avatar_url'")->fetch();
+            if (!$cols) {
+                $altCol = $pdo->query("SHOW COLUMNS FROM `artistes` LIKE 'avatar'")->fetch();
+                if ($altCol) {
+                    $pdo->exec("ALTER TABLE `artistes` CHANGE COLUMN `avatar` `avatar_url` LONGTEXT NULL");
+                } else {
+                    $pdo->exec("ALTER TABLE `artistes` ADD COLUMN `avatar_url` LONGTEXT NULL AFTER `pin`");
+                }
+            }
+        } catch (Throwable $ignore) {}
+
+        try {
+            $userCols = $pdo->query("SHOW COLUMNS FROM `utilisateurs` LIKE 'avatar_url'")->fetch();
+            if (!$userCols) {
+                $altUserCol = $pdo->query("SHOW COLUMNS FROM `utilisateurs` LIKE 'avatar'")->fetch();
+                if ($altUserCol) {
+                    $pdo->exec("ALTER TABLE `utilisateurs` CHANGE COLUMN `avatar` `avatar_url` LONGTEXT NULL");
+                } else {
+                    $pdo->exec("ALTER TABLE `utilisateurs` ADD COLUMN `avatar_url` LONGTEXT NULL");
+                }
+            }
+        } catch (Throwable $ignore) {}
+
         try {
             $pdo->exec("
                 ALTER TABLE `artistes` 

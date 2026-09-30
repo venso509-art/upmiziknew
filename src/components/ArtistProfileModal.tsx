@@ -27,6 +27,13 @@ import { SongCreditsModal } from './SongCreditsModal';
 import { getArtistBadgeInfo, calculateArtistTotalDonations } from '../utils/badgeSystem';
 import { generateStylizedBanner, getThemeConfigForGenre } from '../utils/bannerGenerator';
 import { updateArtistDocumentMetaTags, generateArtistProfileDeepLink } from '../utils/deepLink';
+import {
+  resolveMediaUrl,
+  handleImageError,
+  DEFAULT_ARTIST_AVATAR,
+  DEFAULT_SONG_COVER,
+  DEFAULT_HEADER_BANNER
+} from '../utils/imageUtils';
 
 interface ArtistProfileModalProps {
   artist: ArtistUser | null;
@@ -139,13 +146,11 @@ export const ArtistProfileModal: React.FC<ArtistProfileModalProps> = ({
           <div className="relative h-40 sm:h-52 bg-[#060a14] overflow-hidden shrink-0">
             {artist.headerBannerUrl ? (
               <img
-                src={artist.headerBannerUrl}
+                src={resolveMediaUrl(artist.headerBannerUrl, DEFAULT_HEADER_BANNER)}
                 alt={`Bannè ${artist.stageName}`}
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1200&auto=format&fit=crop&q=80';
-                }}
+                onError={(e) => handleImageError(e, DEFAULT_HEADER_BANNER)}
               />
             ) : (
               <div className="w-full h-full relative bg-gradient-to-r from-blue-950 via-slate-900 to-red-950 flex items-end">
@@ -198,12 +203,10 @@ export const ArtistProfileModal: React.FC<ArtistProfileModalProps> = ({
               <div className="flex items-end gap-3.5 sm:gap-4">
                 <div className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-2xl sm:rounded-3xl overflow-hidden border-4 border-[#0a0f1d] shadow-2xl bg-black shrink-0 z-10">
                   <img
-                    src={artist.avatarUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80'}
+                    src={resolveMediaUrl(artist.avatarUrl, DEFAULT_ARTIST_AVATAR)}
                     alt={artist.stageName}
                     className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80';
-                    }}
+                    onError={(e) => handleImageError(e, DEFAULT_ARTIST_AVATAR)}
                   />
                 </div>
                 <div className="mb-1 sm:mb-2 z-10">
@@ -532,12 +535,10 @@ export const ArtistProfileModal: React.FC<ArtistProfileModalProps> = ({
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="relative w-10 h-10 rounded-xl overflow-hidden shrink-0 border border-white/[0.1] bg-black">
                             <img
-                              src={song.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80'}
+                              src={resolveMediaUrl(song.coverUrl, DEFAULT_SONG_COVER)}
                               alt={song.title}
                               className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80';
-                              }}
+                              onError={(e) => handleImageError(e, DEFAULT_SONG_COVER)}
                             />
                             <button
                               onClick={() => onPlayToggle(song)}
@@ -698,12 +699,10 @@ export const ArtistProfileModal: React.FC<ArtistProfileModalProps> = ({
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="relative w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-white/[0.1] bg-black">
                             <img
-                              src={song.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80'}
+                              src={resolveMediaUrl(song.coverUrl, DEFAULT_SONG_COVER)}
                               alt={song.title}
                               className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80';
-                              }}
+                              onError={(e) => handleImageError(e, DEFAULT_SONG_COVER)}
                             />
                             <button
                               onClick={() => onPlayToggle(song)}

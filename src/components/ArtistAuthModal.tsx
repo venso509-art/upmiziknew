@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { ArtistUser, PaymentSettingsConfig } from '../types';
 import { HAITIAN_DEPARTMENTS_AND_CITIES, ALL_HAITIAN_CITIES } from '../data/haitianCities';
-import { compressAndReadFile } from '../utils/imageUtils';
+import { compressAndReadFile, resolveMediaUrl } from '../utils/imageUtils';
 import { StorageService } from '../utils/storage';
 import { HostingerService } from '../utils/hostingerService';
 import { UpMizikAPI } from '../utils/apiService';
@@ -166,7 +166,7 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
         setAvatarPreview(compressed);
         UpMizikAPI.uploadFile(file, 'avatars').then(res => {
           if (res && res.url) {
-            setAvatarPreview(res.url);
+            setAvatarPreview(resolveMediaUrl(res.url));
           }
         }).catch(() => {});
       } catch (err) {
@@ -185,7 +185,7 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
         setProofPreview(compressed);
         UpMizikAPI.uploadFile(file, 'proofs').then(res => {
           if (res && res.url) {
-            setProofPreview(res.url);
+            setProofPreview(resolveMediaUrl(res.url));
           }
         }).catch(() => {});
       } catch (err) {

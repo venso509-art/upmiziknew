@@ -36,6 +36,7 @@ import { IdbStorage } from './idbStorage';
 import { buildAwardCelebrationMessage, AwardTierDefinition } from './awardsUtils';
 import { UserIdentifier } from './userIdentifier';
 import { UpMizikAPI } from './apiService';
+import { resolveMediaUrl } from './imageUtils';
 
 const KEYS = {
   MUSIC: 'upmizik_music_v2',
@@ -401,6 +402,11 @@ export const StorageService = {
       // Repair legacy invalid/idb coverUrl entries
       if (!updated.coverUrl || updated.coverUrl.startsWith('idb:') || updated.coverUrl.trim() === '') {
         updated.coverUrl = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80';
+      } else {
+        updated.coverUrl = resolveMediaUrl(updated.coverUrl, 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80');
+      }
+      if (updated.audioUrl) {
+        updated.audioUrl = resolveMediaUrl(updated.audioUrl);
       }
       return updated;
     });
@@ -863,6 +869,16 @@ export const StorageService = {
           updated.suspensionDays = undefined;
           updated.suspensionReason = undefined;
         }
+      }
+
+      if (updated.avatarUrl) {
+        updated.avatarUrl = resolveMediaUrl(updated.avatarUrl, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80');
+      }
+      if (updated.registrationProofUrl) {
+        updated.registrationProofUrl = resolveMediaUrl(updated.registrationProofUrl);
+      }
+      if (updated.headerBannerUrl) {
+        updated.headerBannerUrl = resolveMediaUrl(updated.headerBannerUrl);
       }
       return updated;
     });

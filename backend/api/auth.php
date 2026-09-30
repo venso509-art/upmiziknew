@@ -237,6 +237,7 @@ if ($method === 'POST') {
                 ville AS city,
                 pin,
                 avatar_url AS avatarUrl,
+                avatar_url AS avatar,
                 bio,
                 racines_musicales AS musicalRoots,
                 influences AS musicalInfluences,
