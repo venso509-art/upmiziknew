@@ -170,14 +170,19 @@ self.addEventListener('fetch', (event) => {
         const imagesCache = await caches.open(IMAGES_CACHE);
         const cachedResponse = await imagesCache.match(request);
 
-        const networkFetch = fetch(request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              imagesCache.put(request, networkResponse.clone());
+        const networkFetch = (async () => {
+          try {
+            const networkResponse = await fetch(request);
+            if (networkResponse && networkResponse.ok && networkResponse.status === 200) {
+              try {
+                await imagesCache.put(request, networkResponse.clone());
+              } catch (_) {}
             }
             return networkResponse;
-          })
-          .catch(() => null);
+          } catch (_) {
+            return null;
+          }
+        })();
 
         return cachedResponse || (await networkFetch) || new Response('', { status: 404 });
       })()
@@ -191,9 +196,11 @@ self.addEventListener('fetch', (event) => {
       (async () => {
         try {
           const networkResponse = await fetch(request);
-          if (networkResponse && networkResponse.status === 200) {
-            const pagesCache = await caches.open(PAGES_CACHE);
-            pagesCache.put(request, networkResponse.clone());
+          if (networkResponse && networkResponse.ok && networkResponse.status === 200) {
+            try {
+              const pagesCache = await caches.open(PAGES_CACHE);
+              await pagesCache.put(request, networkResponse.clone());
+            } catch (_) {}
           }
           return networkResponse;
         } catch (error) {
@@ -222,14 +229,19 @@ self.addEventListener('fetch', (event) => {
       const staticCache = await caches.open(STATIC_CACHE);
       const cachedResponse = await staticCache.match(request);
 
-      const fetchPromise = fetch(request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            staticCache.put(request, networkResponse.clone());
+      const fetchPromise = (async () => {
+        try {
+          const networkResponse = await fetch(request);
+          if (networkResponse && networkResponse.ok && networkResponse.status === 200) {
+            try {
+              await staticCache.put(request, networkResponse.clone());
+            } catch (_) {}
           }
           return networkResponse;
-        })
-        .catch(() => null);
+        } catch (_) {
+          return null;
+        }
+      })();
 
       return cachedResponse || (await fetchPromise) || new Response(null, { status: 404 });
     })()
