@@ -272,10 +272,10 @@ if ($method === 'GET') {
 if ($method === 'POST') {
     $data = getJsonInput();
 
-    if (empty($data['title']) || empty($data['artistId']) || empty($data['audioUrl']) || empty($data['coverUrl'])) {
+    if (empty($data['title']) || empty($data['artistId'])) {
         jsonResponse([
             'success' => false,
-            'message' => 'Tit, Atis, Lyen Odyo ak Lyen Kouvèti obligatwa.',
+            'message' => 'Tit ak Atis obligatwa pou anrejistre yon mizik.',
             'data' => null,
             'errors' => ['Missing required music fields']
         ], 400);
@@ -292,8 +292,54 @@ if ($method === 'POST') {
     $releaseFormat = in_array($rawFormat, $validFormats) ? $rawFormat : 'single';
     $albumName = $data['albumName'] ?? $data['album_id'] ?? null;
     $trackNumber = (int)($data['trackNumber'] ?? 1);
-    $coverUrl = $data['coverUrl'];
-    $audioUrl = $data['audioUrl'];
+    $position = !empty($data['position']) ? (int)$data['position'] : null;
+    $coverUrl = !empty($data['coverUrl']) ? $data['coverUrl'] : 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80';
+    $audioUrl = !empty($data['audioUrl']) ? $data['audioUrl'] : 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3';
+
+    // Otomatikman konvèti coverUrl base64 soti sou telefòn pou l vin yon imaj fizik sou disk
+    if (strpos($coverUrl, 'data:image/') === 0) {
+        try {
+            $coverDir = dirname(__DIR__) . '/uploads/covers';
+            if (!is_dir($coverDir)) {
+                @mkdir($coverDir, 0755, true);
+            }
+            if (preg_match('/^data:image\/(\w+);base64,/', $coverUrl, $type)) {
+                $rawBase64 = substr($coverUrl, strpos($coverUrl, ',') + 1);
+                $ext = strtolower($type[1]);
+                if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
+                    $ext = 'jpg';
+                }
+                $decoded = base64_decode($rawBase64);
+                if ($decoded !== false) {
+                    $fileName = 'cover_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                    $filePath = $coverDir . '/' . $fileName;
+                    if (@file_put_contents($filePath, $decoded)) {
+                        $coverUrl = '/backend/uploads/covers/' . $fileName;
+                    }
+                }
+            }
+        } catch (Throwable $e) {}
+    }
+
+    // Otomatikman konvèti audioUrl base64 soti sou telefòn
+    if (strpos($audioUrl, 'data:audio/') === 0) {
+        try {
+            $musicDir = dirname(__DIR__) . '/uploads/music';
+            if (!is_dir($musicDir)) {
+                @mkdir($musicDir, 0755, true);
+            }
+            $rawBase64 = substr($audioUrl, strpos($audioUrl, ',') + 1);
+            $decoded = base64_decode($rawBase64);
+            if ($decoded !== false) {
+                $fileName = 'track_' . time() . '_' . bin2hex(random_bytes(4)) . '.mp3';
+                $filePath = $musicDir . '/' . $fileName;
+                if (@file_put_contents($filePath, $decoded)) {
+                    $audioUrl = '/backend/uploads/music/' . $fileName;
+                }
+            }
+        } catch (Throwable $e) {}
+    }
+
     $duration = (int)($data['duration'] ?? 180);
     $status = mapStatusToDb($data['status'] ?? 'active');
     $youtubeUrl = $data['youtubeUrl'] ?? null;
@@ -321,11 +367,11 @@ if ($method === 'POST') {
         $stmt = $pdo->prepare("
             INSERT INTO musiques (
                 id, titre, artiste_id, nom_artiste, featuring, categorie, format,
-                nom_album, numero_piste, cover_url, audio_url, duree,
+                nom_album, numero_piste, position, cover_url, audio_url, duree,
                 statut, youtube_url, tiktok_url, instagram_url, date_creation
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, NOW()
             )
             ON DUPLICATE KEY UPDATE
@@ -336,6 +382,7 @@ if ($method === 'POST') {
                 format = VALUES(format),
                 nom_album = VALUES(nom_album),
                 numero_piste = VALUES(numero_piste),
+                position = VALUES(position),
                 cover_url = VALUES(cover_url),
                 audio_url = VALUES(audio_url),
                 duree = VALUES(duree),
@@ -347,7 +394,7 @@ if ($method === 'POST') {
 
         $stmt->execute([
             $id, $title, $artistId, $artistName, $feat, $category, $releaseFormat,
-            $albumName, $trackNumber, $coverUrl, $audioUrl, $duration,
+            $albumName, $trackNumber, $position, $coverUrl, $audioUrl, $duration,
             $status, $youtubeUrl, $tiktokUrl, $instagramUrl
         ]);
 

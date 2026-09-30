@@ -15,6 +15,7 @@ import {
 } from './types';
 import { StorageService } from './utils/storage';
 import { HostingerService } from './utils/hostingerService';
+import { UpMizikAPI } from './utils/apiService';
 import { INITIAL_ARTISTS } from './data/initialData';
 import { globalSoundEngine } from './utils/audioEngine';
 
@@ -47,6 +48,7 @@ import { OfflinePlaylistModal } from './components/OfflinePlaylistModal';
 import { ArtistStoryBar } from './components/ArtistStoryBar';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { FontSelectorModal, FONT_OPTIONS } from './components/FontSelectorModal';
+import { AppSplashScreen } from './components/AppSplashScreen';
 
 /**
  * Fonksyon sekirize pou voye notifikasyon natif nan navigatè a (Browser Notification API)
@@ -84,6 +86,9 @@ const triggerBrowserNotification = (title: string, options?: NotificationOptions
 export default function App() {
   // Navigation & View state
   const [currentView, setCurrentView] = useState<ActiveView>('public');
+
+  // Loading animation state when opening the site with UPMIZIK brand name
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   // Enforce robust viewport meta tag & prevent accidental zoom on mobile clicks/inputs
   useEffect(() => {
@@ -617,8 +622,8 @@ export default function App() {
       }
     });
 
-    // Mekanis Socket / Refetch Otomatik pou Mizik ak Done sou Hostinger MySQL
-    const unsubAutoRefetch = HostingerService.startAutoRefetch(8000);
+    // Mekanis Socket / Refetch Otomatik pou Mizik ak Done sou Hostinger MySQL (senkronize tout aparèy rapid)
+    const unsubAutoRefetch = HostingerService.startAutoRefetch(4000);
 
     return () => {
       unsubArtists();
@@ -1115,10 +1120,16 @@ export default function App() {
     addToast('success', `Byenvini ${artist.stageName}! Ou konekte nan Espas Atis ou.`);
   };
 
-  const handleArtistRegister = (newArtist: ArtistUser) => {
+  const handleArtistRegister = async (newArtist: ArtistUser) => {
     StorageService.saveArtist(newArtist);
-    HostingerService.saveSingleArtist(newArtist);
     setArtists(StorageService.getArtists());
+    try {
+      await HostingerService.saveSingleArtist(newArtist);
+      await UpMizikAPI.registerArtist(newArtist);
+      HostingerService.fetchArtistsAndNotify(true).catch(() => {});
+    } catch (err) {
+      console.warn('Registration server sync warn:', err);
+    }
     addToast('success', `Kont ou kreye avèk siksè! Prèv $4.99 la voye bay Admin.`);
     // Alèt admin: SÈLMAN pou currentAdmin, li p ap janm parèt pou atis oswa itilizatè piblik
     addToast('info', `🔔 Nouvo atis "${newArtist.stageName}" an atant validasyon nan panèl Admin an.`, 'admin');
@@ -1181,10 +1192,11 @@ export default function App() {
     // 2. Voye nan Hostinger MySQL epi difize an tan reyèl pou tout lòt itilizatè konekte
     try {
       await HostingerService.saveSingleMusic(newSong);
+      await UpMizikAPI.addMusic(newSong);
       // Asire tout detay sèvè yo aliyen san reta
       setTimeout(() => {
-        HostingerService.fetchMusicAndNotify(true);
-      }, 400);
+        HostingerService.fetchMusicAndNotify(true).catch(() => {});
+      }, 300);
     } catch (err) {
       console.warn('[handleAddNewSong] Hostinger sync warn:', err);
     }
@@ -1207,9 +1219,8 @@ export default function App() {
   };
 
   // Admin & Artist Actions
-  const handleSaveMusicItem = (song: MusicItem) => {
+  const handleSaveMusicItem = async (song: MusicItem) => {
     StorageService.saveMusic(song);
-    HostingerService.saveSingleMusic(song);
     const updatedList = StorageService.getMusic();
     setMusicList(updatedList);
     setArtists(StorageService.getArtists());
@@ -1224,6 +1235,16 @@ export default function App() {
       }
     }
     addToast('success', `Moso mizik "${song.title}" anrejistre avèk siksè!`);
+
+    try {
+      await HostingerService.saveSingleMusic(song);
+      await UpMizikAPI.addMusic(song);
+      setTimeout(() => {
+        HostingerService.fetchMusicAndNotify(true).catch(() => {});
+      }, 300);
+    } catch (err) {
+      console.warn('[handleSaveMusicItem] Hostinger sync error:', err);
+    }
   };
 
   const handleDeleteMusicItem = (musicId: string) => {
@@ -1254,12 +1275,9 @@ export default function App() {
     addToast('success', 'Konfigirasyon Top 3 anrejistre!', 'admin');
   };
 
-  const handleValidateDonation = (donationId: string, accept: boolean) => {
+  const handleValidateDonation = async (donationId: string, accept: boolean) => {
     const adminName = currentAdmin?.name || 'Mr Clauvens';
     const result = StorageService.validateDonation(donationId, accept, adminName);
-    if (result.donation) {
-      HostingerService.saveSingleDonation(result.donation);
-    }
     if (result.generatedEmail) {
       HostingerService.saveInboxMessage(result.generatedEmail);
     }
@@ -1276,14 +1294,24 @@ export default function App() {
     } else {
       addToast(accept ? 'success' : 'info', accept ? 'Sipò valide! 85% ajoute pou atis la.' : 'Sipò refize.', 'admin');
     }
+
+    try {
+      if (result.donation) {
+        await HostingerService.saveSingleDonation(result.donation);
+      }
+      await UpMizikAPI.validateDonation(donationId, accept);
+      setTimeout(() => {
+        HostingerService.fetchDonationsAndNotify(true).catch(() => {});
+        HostingerService.fetchMusicAndNotify(true).catch(() => {});
+      }, 300);
+    } catch (err) {
+      console.warn('validateDonation server sync warn:', err);
+    }
   };
 
-  const handleValidateArtist = (artistId: string, accept: boolean, reason?: string) => {
+  const handleValidateArtist = async (artistId: string, accept: boolean, reason?: string) => {
     const adminName = currentAdmin?.name || 'Mr Clauvens';
     const result = StorageService.validateArtist(artistId, accept, adminName, reason);
-    if (result.artist) {
-      HostingerService.saveSingleArtist(result.artist);
-    }
     if (result.generatedEmail) {
       HostingerService.saveInboxMessage(result.generatedEmail);
     }
@@ -1360,6 +1388,18 @@ export default function App() {
       }
     } else {
       addToast(accept ? 'success' : 'info', accept ? 'Kont Atis verifye & valide!' : 'Enskripsyon atis refize.', 'admin');
+    }
+
+    try {
+      if (result.artist) {
+        await HostingerService.saveSingleArtist(result.artist);
+      }
+      await UpMizikAPI.validateArtist(artistId, accept, reason);
+      setTimeout(() => {
+        HostingerService.fetchArtistsAndNotify(true).catch(() => {});
+      }, 300);
+    } catch (err) {
+      console.warn('validateArtist server sync warn:', err);
     }
   };
 
@@ -1524,12 +1564,20 @@ export default function App() {
   };
 
   // Support Submission
-  const handleConfirmSupport = (newDonation: DonationItem) => {
+  const handleConfirmSupport = async (newDonation: DonationItem) => {
     const saved = StorageService.addDonation(newDonation);
-    HostingerService.saveSingleDonation(saved);
     const activeAdmin = currentAdmin || StorageService.getLoggedInAdmin();
     if (activeAdmin && activeAdmin.role === 'super_admin') {
       setDonations(StorageService.getDonations(activeAdmin));
+    }
+    try {
+      await HostingerService.saveSingleDonation(saved);
+      await UpMizikAPI.submitDonation(saved);
+      setTimeout(() => {
+        HostingerService.fetchDonationsAndNotify(true).catch(() => {});
+      }, 300);
+    } catch (err) {
+      console.warn('handleConfirmSupport server sync warn:', err);
     }
     addToast(
       'success',
@@ -1549,6 +1597,13 @@ export default function App() {
         ? 'bg-slate-50 text-slate-900 selection:bg-blue-600 selection:text-white' 
         : 'bg-slate-950 text-slate-100 selection:bg-red-500 selection:text-white'
     }`}>
+      {/* Dynamic Animated Splash Screen with UPMIZIK name on site entry */}
+      {isInitialLoading && (
+        <AppSplashScreen
+          minDisplayTimeMs={1600}
+          onFinish={() => setIsInitialLoading(false)}
+        />
+      )}
       
       {/* Toast Notifications */}
       <ToastNotification toasts={toasts} onDismiss={removeToast} />

@@ -6,19 +6,13 @@
 require_once dirname(__DIR__) . '/config/env.php';
 
 function handleCors() {
-    $allowedOriginsEnv = env('ALLOWED_ORIGINS', '*');
-    $appEnv = env('APP_ENV', 'production');
     $httpOrigin = $_SERVER['HTTP_ORIGIN'] ?? '';
-
-    if ($allowedOriginsEnv === '*' || $appEnv === 'development') {
-        header("Access-Control-Allow-Origin: " . ($httpOrigin ?: '*'));
+    
+    // Always permit origin dynamically so mobile browsers, webviews, and preview never get blocked
+    if (!empty($httpOrigin)) {
+        header("Access-Control-Allow-Origin: {$httpOrigin}");
     } else {
-        $allowedList = array_map('trim', explode(',', $allowedOriginsEnv));
-        if (in_array($httpOrigin, $allowedList)) {
-            header("Access-Control-Allow-Origin: {$httpOrigin}");
-        } elseif (!empty($allowedList[0])) {
-            header("Access-Control-Allow-Origin: {$allowedList[0]}");
-        }
+        header("Access-Control-Allow-Origin: *");
     }
 
     header("Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS");

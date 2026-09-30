@@ -165,7 +165,8 @@ class ApiService {
 
       const res = await fetch(`${this.baseUrl}/musics.php?${query.toString()}`);
       const data = await res.json();
-      return data.success ? data.musics : [];
+      const list = data.musics || data.data?.musics;
+      return Array.isArray(list) ? list : [];
     } catch {
       return [];
     }
@@ -316,10 +317,14 @@ class ApiService {
       const res = await fetch(`${this.baseUrl}/donations.php`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: donationId, accept }),
+        body: JSON.stringify({
+          id: donationId,
+          accept,
+          status: accept ? 'validated' : 'rejected'
+        }),
       });
       const data = await res.json();
-      return data.success;
+      return !!data.success;
     } catch {
       return false;
     }

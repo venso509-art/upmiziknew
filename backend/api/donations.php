@@ -312,7 +312,7 @@ if ($method === 'POST') {
 if ($method === 'PUT' || $method === 'PATCH') {
     $data = getJsonInput();
     $id = $data['id'] ?? $_GET['id'] ?? null;
-    $rawStatus = $data['status'] ?? null;
+    $rawStatus = $data['status'] ?? (isset($data['accept']) ? ($data['accept'] ? 'validated' : 'rejected') : null);
 
     if (!$id || !$rawStatus) {
         jsonResponse(['success' => false, 'message' => 'Id ak nouvo estati a obligatwa.'], 400);

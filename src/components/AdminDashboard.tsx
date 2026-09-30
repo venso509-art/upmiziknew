@@ -244,6 +244,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [exchangeRate, setExchangeRate] = useState<number>(() => StorageService.getPaymentSettings().htgExchangeRate || DEFAULT_HTG_EXCHANGE_RATE);
   const [artistRegistrationFeeUsd, setArtistRegistrationFeeUsd] = useState<number>(() => StorageService.getPaymentSettings().artistRegistrationFeeUsd ?? 4.99);
 
+  // Real-time server sync state & manual trigger
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        HostingerService.fetchArtistsAndNotify(true),
+        HostingerService.fetchDonationsAndNotify(true),
+        HostingerService.fetchMusicAndNotify(true),
+        HostingerService.fetchPaymentSettingsAndNotify(true)
+      ]);
+    } catch (e) {
+      console.warn('Manual refresh error:', e);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
+
+  // Automatically refresh latest server data whenever admin switches tabs
+  useEffect(() => {
+    HostingerService.fetchArtistsAndNotify(false).catch(() => {});
+    HostingerService.fetchDonationsAndNotify(false).catch(() => {});
+    HostingerService.fetchMusicAndNotify(false).catch(() => {});
+  }, [activeTab]);
+
   // Sync settings dynamically when admin updates payment methods or fees
   useEffect(() => {
     const handleSettingsChanged = (e: Event) => {
@@ -1622,6 +1648,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5">
+          <button
+            id="admin-refresh-data-btn"
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-[#0d1424] hover:bg-white/[0.08] text-yellow-400 border border-yellow-500/30 flex items-center gap-2 transition-all shadow-lg active:scale-95 disabled:opacity-50 cursor-pointer"
+            title="Rafrechi tout done yo depi nan sèvè MySQL Coolify a"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-yellow-300' : ''}`} />
+            <span>{isRefreshing ? 'Senkronizasyon...' : 'Rafrechi Sèvè'}</span>
+          </button>
+
           <button
             id="admin-logout-btn"
             onClick={handleAdminLogout}

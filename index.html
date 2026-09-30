@@ -27,7 +27,28 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Syne:wght@600;700;800&family=Outfit:wght@500;600;700;800;900&family=Unbounded:wght@600;700;800;900&family=Poppins:wght@500;600;700;800;900&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;700&family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
   </head>
   <body class="bg-[#05070a] text-slate-100 antialiased min-h-screen selection:bg-red-600 selection:text-white">
-    <div id="root"></div>
+    <div id="root">
+      <div id="pre-loader" style="position:fixed;inset:0;background-color:#05070a;color:#ffffff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;font-family:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;user-select:none;">
+        <div style="position:relative;width:96px;height:96px;margin-bottom:20px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:radial-gradient(circle, #0c3882 0%, #05070a 75%);box-shadow:0 0 40px rgba(220,38,38,0.35);border:1px solid rgba(255,255,255,0.1);">
+          <img src="/upmizik-logo.svg" alt="UpMizik" style="width:64px;height:64px;object-fit:contain;" />
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-size:2rem;font-weight:900;letter-spacing:-0.03em;color:#ffffff;">Up<span style="color:#ef4444;">Mizik</span></span>
+          <span style="font-size:10px;font-weight:800;text-transform:uppercase;background:#eab308;color:#090d16;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">Ayiti</span>
+        </div>
+        <p style="font-size:12px;color:#94a3b8;margin:0 0 24px 0;letter-spacing:0.02em;">Platfòm Mizik Ayisyen &amp; Sipò Dirèk</p>
+        <div style="width:190px;height:4px;background:rgba(255,255,255,0.1);border-radius:9999px;overflow:hidden;position:relative;">
+          <div style="position:absolute;top:0;left:0;height:100%;width:40%;background:linear-gradient(90deg,#2563eb,#eab308,#ef4444);border-radius:9999px;animation:preloaderAnim 1.2s ease-in-out infinite alternate;"></div>
+        </div>
+        <style>
+          @keyframes preloaderAnim {
+            0% { left: 0%; width: 25%; }
+            50% { width: 55%; }
+            100% { left: 75%; width: 25%; }
+          }
+        </style>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

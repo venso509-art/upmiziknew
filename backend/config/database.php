@@ -33,7 +33,7 @@ if ($dbUrl && ($parsed = parse_url($dbUrl))) {
 
 // 1. IP ekstèn VPS la (2.25.132.44) dwe TOUJOU ranplase paske konekte sou li depi anndan Docker bay "Operation timed out"
 if (empty($rawHost) || $rawHost === '2.25.132.44' || str_contains($rawHost, '2.25.132.44')) {
-    $rawHost = 'bva4ne7esmb8nw0ri0oscbec';
+    $rawHost = 'upmizik-db';
 }
 
 // 2. Asire w modpas la pa rete vid si Coolify pa pase DB_PASS
@@ -79,23 +79,23 @@ if (!function_exists('getDBConnection')) {
             }
         }
 
-        $primaryHost = defined('DB_HOST') ? DB_HOST : 'bva4ne7esmb8nw0ri0oscbec';
+        $primaryHost = defined('DB_HOST') ? DB_HOST : 'upmizik-db';
         if ($primaryHost === '2.25.132.44') {
-            $primaryHost = 'bva4ne7esmb8nw0ri0oscbec';
+            $primaryHost = 'upmizik-db';
         }
 
         $candidateHosts = array_unique(array_filter([
             $primaryHost,
-            'bva4ne7esmb8nw0ri0oscbec',
             'upmizik-db',
             'db',
             'mysql',
+            '127.0.0.1',
+            'localhost',
+            'bva4ne7esmb8nw0ri0oscbec',
             $gatewayIp,
             '10.0.1.1',
             '172.17.0.1',
-            'host.docker.internal',
-            '127.0.0.1',
-            'localhost'
+            'host.docker.internal'
         ]));
 
         // Filtre sèlman host ki ka rezoud pou pa pèdi tan
