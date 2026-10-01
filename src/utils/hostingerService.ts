@@ -286,12 +286,20 @@ class HostingerSyncService {
       }
 
       // Voye nan backend Hostinger MySQL (POST upsert avèk ON DUPLICATE KEY UPDATE)
-      const res = await UpMizikAPI.registerArtist(artist);
-      if (!res.success) {
-        return { 
-          success: false, 
-          message: res.message || 'Imèl sa a deja itilize sou yon lòt kont atis' 
-        };
+      try {
+        const res = await UpMizikAPI.registerArtist(artist);
+        if (!res.success) {
+          // Si backend lan di imèl la deja itilize, bloke l avèk mesaj egzak la
+          if (res.message && (res.message.includes('deja itilize') || res.message.includes('already active') || res.message.includes('plizyè moun'))) {
+            return { 
+              success: false, 
+              message: res.message 
+            };
+          }
+          console.warn('[HostingerService] Remote API notice:', res.message);
+        }
+      } catch (apiErr) {
+        console.warn('[HostingerService] Remote API connection warning:', apiErr);
       }
 
       const idx = all.findIndex((a) => a.id === artist.id);

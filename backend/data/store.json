@@ -1,0 +1,25 @@
+{
+  "artists": [],
+  "musics": [],
+  "donations": [],
+  "settings": {
+    "artistRegistrationFeeUsd": 4.99,
+    "artistRegistrationFeeHtg": 650,
+    "methods": [
+      {
+        "id": "moncash",
+        "name": "MonCash",
+        "enabled": true,
+        "number": "509 3788-0000",
+        "merchantName": "UpMizik Ofisyèl"
+      },
+      {
+        "id": "natcash",
+        "name": "Natcash",
+        "enabled": true,
+        "number": "509 4200-0000",
+        "merchantName": "UpMizik Ofisyèl"
+      }
+    ]
+  }
+}

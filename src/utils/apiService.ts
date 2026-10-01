@@ -9,17 +9,15 @@ import { ArtistUser, MusicItem, DonationItem, ArtistInboxMessage, SocialPost, Pu
 import { resolveMediaUrl, DEFAULT_ARTIST_AVATAR, DEFAULT_SONG_COVER } from './imageUtils';
 
 // API Base URL:
-// Sèvi ak chemen relatif /backend/api lè n ap kouri sou upmizik.com, sou IP VPS la, oswa localhost.
+// Sèvi ak chemen relatif /backend/api pou toujou rete sou menm orijin (same-origin),
+// sa ki elimine tout erè CORS, timeout rezo, ak redireksyon 302/307.
 const getInitialApiBaseUrl = (): string => {
   const envUrl = ((import.meta as unknown as { env?: Record<string, string> }).env?.VITE_PHP_API_URL as string);
   if (envUrl) return envUrl;
   if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host.includes('upmizik.com') || host.includes('2.25.132.44') || host === 'localhost' || host === '127.0.0.1') {
-      return `${window.location.origin}/backend/api`;
-    }
+    return `${window.location.origin}/backend/api`;
   }
-  return 'https://www.upmizik.com/backend/api';
+  return '/backend/api';
 };
 
 const API_BASE_URL = getInitialApiBaseUrl();
