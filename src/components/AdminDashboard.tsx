@@ -526,6 +526,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setInternalRefreshKey(k => k + 1);
   };
 
+  const handleGenerateTestPendingArtist = () => {
+    const timestamp = Date.now();
+    const testArtist: ArtistUser = {
+      id: `art_test_${timestamp}`,
+      name: 'Jean-Pierre Peterson',
+      stageName: 'Ti Peterson Mizik',
+      email: `peterson_${timestamp}@upmizik.com`,
+      phone: '509 3788-1234',
+      city: 'Pòtoprens',
+      pin: '1234',
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+      bio: 'Nouvo chantè ak konpozitè k ap evolye nan vil Pòtoprens, espesyalize nan Konpa modèn, Afrobeats kreyòl ak R&B. Mwen voye prèv peman $4.99 USD (650 HTG) mwen pou validasyon ofisyèl.',
+      musicalRoots: 'Konpa Dirèk, Rasin, Afrobeats',
+      musicalInfluences: 'Harmonik, Klass, Kai, Rutshelle Guillaume',
+      artisticVision: 'Mete kilti ayisyen sou tout platfòm mondyal yo atravè bon jan kalite pwodiksyon mizikal.',
+      artistQuote: 'Mizik se nanm mwen, pasyon m se pataje lanmou ak pèp ayisyen an.',
+      status: 'pending',
+      registrationProofUrl: '/backend/uploads/proofs/prev_moncash_test_atis.svg',
+      registrationFeeUsd: artistRegistrationFeeUsd || 4.99,
+      registrationFeeHtg: Math.round((artistRegistrationFeeUsd || 4.99) * exchangeRate),
+      registrationDate: new Date().toISOString().split('T')[0],
+      totalListens: 0,
+      totalDonationsReceived: 0,
+      youtubeUrl: 'https://youtube.com/@tipetersonmizik',
+      instagramUrl: 'https://instagram.com/tipetersonmizik'
+    };
+
+    StorageService.saveArtist(testArtist);
+    HostingerService.saveSingleArtist(testArtist).catch(() => {});
+    setInternalRefreshKey(k => k + 1);
+    setActiveTab('artists_pending');
+  };
+
   // Manual Artist Form State
   const [manualArtistStageName, setManualArtistStageName] = useState('');
   const [manualArtistName, setManualArtistName] = useState('');
@@ -1811,19 +1844,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
-          <div className="bg-[#05070a]/70 border border-white/[0.06] rounded-xl p-3">
-            <div className="flex items-center justify-between text-slate-400 text-[11px] font-medium">
+          <div
+            onClick={() => setActiveTab('artists_pending')}
+            className="bg-[#05070a]/70 border border-white/[0.06] hover:border-yellow-400/50 hover:bg-yellow-500/[0.04] transition-all rounded-xl p-3 cursor-pointer group shadow"
+            title="Klike pou wè lis tout atis yo epi valide nouvo demand yo"
+          >
+            <div className="flex items-center justify-between text-slate-400 text-[11px] font-medium group-hover:text-yellow-400 transition-colors">
               <span className="flex items-center gap-1.5">
                 <Users className="w-3.5 h-3.5 text-yellow-400" />
                 Total Atis Enskri
               </span>
-              <Infinity className="w-3 h-3 text-yellow-400/80" />
+              <span className="text-[10px] text-yellow-400 underline font-semibold flex items-center gap-0.5">
+                Jere →
+              </span>
             </div>
             <p className="text-xl font-black text-white font-mono mt-1">
-              {artists.length} <span className="text-xs font-sans text-yellow-400 font-bold">atis</span>
+              {effectiveArtists.length} <span className="text-xs font-sans text-yellow-400 font-bold">atis</span>
             </p>
             <p className="text-[10px] text-slate-400 mt-0.5">
-              {activeArtists.length} aktif • {pendingArtists.length} an atant
+              {activeArtists.length} aktif • <strong className="text-amber-400">{pendingArtists.length} an atant</strong>
             </p>
           </div>
 
@@ -3629,8 +3668,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
 
                     {filteredPendingArtists.length === 0 ? (
-                      <div className="py-6 text-center text-xs text-slate-500 bg-[#05070a]/60 rounded-2xl border border-white/[0.04]">
-                        {validationSearchQuery ? 'Pa gen okenn prèv atis an atant ki koresponn ak rechèch ou a.' : 'Pa gen okenn prèv enskripsyon atis ki an atant kounye a. Tout kont atis yo ajou!'}
+                      <div className="py-6 text-center text-xs text-slate-500 bg-[#05070a]/60 rounded-2xl border border-white/[0.04] space-y-3">
+                        <p>{validationSearchQuery ? 'Pa gen okenn prèv atis an atant ki koresponn ak rechèch ou a.' : 'Pa gen okenn prèv enskripsyon atis ki an atant kounye a. Tout kont atis yo ajou!'}</p>
+                        <button
+                          type="button"
+                          onClick={handleGenerateTestPendingArtist}
+                          className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 flex items-center gap-2 mx-auto transition-all active:scale-95 shadow"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                          <span>🧪 Jenere yon Demand Atis Tès (MonCash $4.99)</span>
+                        </button>
                       </div>
                     ) : (
                       <div className="space-y-3">
@@ -4437,6 +4484,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span>Vide Demand Atis ({pendingList.length})</span>
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={handleGenerateTestPendingArtist}
+                    className="px-3.5 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-slate-950 shadow-lg shadow-emerald-500/20 flex items-center gap-1.5 transition-all active:scale-95"
+                    title="Jenere yon nouvo atis tès konplè ak tout foto prèv transfè MonCash pou teste validasyon an"
+                  >
+                    <Sparkles className="w-4 h-4 text-slate-950" />
+                    <span>🧪 Kreye Atis Tès (MonCash $4.99)</span>
+                  </button>
 
                   <button
                     type="button"

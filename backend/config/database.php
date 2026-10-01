@@ -32,7 +32,7 @@ if ($dbUrl && ($parsed = parse_url($dbUrl))) {
 }
 
 // 1. IP ekstèn VPS la (2.25.132.44) dwe TOUJOU ranplase paske konekte sou li depi anndan Docker bay "Operation timed out"
-if (empty($rawHost) || $rawHost === '2.25.132.44' || str_contains($rawHost, '2.25.132.44')) {
+if (empty($rawHost) || $rawHost === '2.25.132.44' || str_contains($rawHost, '2.25.132.44') || $rawHost === 'bva4ne7esmb8nw0ri0oscbec') {
     $rawHost = 'upmizik-db';
 }
 
@@ -81,45 +81,20 @@ if (!function_exists('getDBConnection')) {
             }
         }
 
-        $primaryHost = defined('DB_HOST') ? DB_HOST : 'bva4ne7esmb8nw0ri0oscbec';
-        if ($primaryHost === '2.25.132.44') {
-            $primaryHost = 'bva4ne7esmb8nw0ri0oscbec';
+        $primaryHost = defined('DB_HOST') && !empty(DB_HOST) ? DB_HOST : 'upmizik-db';
+        if ($primaryHost === '2.25.132.44' || str_contains($primaryHost, '2.25.132.44') || $primaryHost === 'bva4ne7esmb8nw0ri0oscbec') {
+            $primaryHost = 'upmizik-db';
         }
 
-        $candidateHosts = array_unique(array_filter([
+        $hostsToTry = array_unique(array_filter([
             $primaryHost,
-            'bva4ne7esmb8nw0ri0oscbec',
             'upmizik-db',
             'db',
             'mysql',
             '127.0.0.1',
             'localhost',
-            $gatewayIp,
-            '10.0.1.1',
-            '172.17.0.1',
-            'host.docker.internal'
+            $gatewayIp
         ]));
-
-        // Filtre sèlman host ki ka rezoud pou pa pèdi tan
-        $hostsToTry = [];
-        foreach ($candidateHosts as $h) {
-            if (empty($h) || $h === '2.25.132.44') continue;
-            if (filter_var($h, FILTER_VALIDATE_IP)) {
-                $hostsToTry[] = $h;
-            } else {
-                // Tcheke si DNS rezoud non an
-                $resolved = @gethostbyname($h);
-                if ($resolved !== $h) {
-                    $hostsToTry[] = $h;
-                }
-            }
-        }
-
-        // Si okenn non pa rezoud, mete fallback debaz yo
-        if (empty($hostsToTry)) {
-            $hostsToTry = ['upmizik-db', 'db', '127.0.0.1', 'localhost'];
-            if ($gatewayIp) $hostsToTry[] = $gatewayIp;
-        }
 
         $credentialsToTry = [
             [

@@ -865,6 +865,14 @@ export const StorageService = {
   // ARTISTS
   getArtists: (): ArtistUser[] => {
     const list = getStoredData<ArtistUser[]>(KEYS.ARTISTS, INITIAL_ARTISTS);
+    
+    // Asire tout atis ki nan INITIAL_ARTISTS (tankou atis tès la) toujou parèt menm si localStorage te deja gen lòt done
+    for (const initArt of INITIAL_ARTISTS) {
+      if (!list.some(a => a.id === initArt.id || (a.email && initArt.email && a.email.toLowerCase() === initArt.email.toLowerCase()))) {
+        list.unshift(initArt);
+      }
+    }
+
     const nowTimestamp = Date.now();
 
     const enrichedList = list.map(a => {
