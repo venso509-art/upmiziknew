@@ -7,6 +7,7 @@
     <meta name="description" content="Platfòm Difizyon Mizik Kreyòl & Sipò Dirèk Pou Atis Ayisyen." />
     <meta name="keywords" content="upmizik, up mizik, mizik ayisyen, difizyon mizik, konpa, rap kreyol, atis ayiti, koute mizik, moncash, natcash" />
     <link rel="canonical" href="https://www.upmizik.com/" />
+    <meta name="google-site-verification" content="nitk5SRy6ObVzKGdxYtreomK4Akxd0QKISRozzPTbz4" />
     
     <!-- OpenGraph Social Cards -->
     <meta property="og:type" content="website" />
@@ -80,37 +81,6 @@
   </head>
   <body class="bg-[#05070a] text-slate-100 antialiased min-h-screen selection:bg-red-600 selection:text-white">
     <div id="root">
-      <!-- Lightweight Smooth Pre-Loader with Direct Entry -->
-      <div id="pre-loader" style="position:fixed;inset:0;background-color:#05070a;color:#ffffff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;font-family:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;user-select:none;">
-        <div style="position:relative;width:96px;height:96px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:radial-gradient(circle, #0c3882 0%, #05070a 75%);box-shadow:0 0 40px rgba(220,38,38,0.35);border:1px solid rgba(255,255,255,0.1);">
-          <img src="/upmizik-logo.svg" alt="UpMizik" style="width:64px;height:64px;object-fit:contain;" />
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-          <span style="font-size:2.2rem;font-weight:900;letter-spacing:-0.03em;">
-            <span style="color:#ef4444;">Up</span><span style="color:#2563eb;">Mizik</span>
-          </span>
-          <span style="font-size:10px;font-weight:800;text-transform:uppercase;background:#eab308;color:#090d16;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">Ayiti</span>
-        </div>
-        <p style="font-size:12px;color:#94a3b8;margin:0 0 16px 0;letter-spacing:0.02em;">Platfòm Difizyon Mizik Kreyòl &amp; Sipò Dirèk</p>
-        
-        <div style="width:190px;height:4px;background:rgba(255,255,255,0.1);border-radius:9999px;overflow:hidden;position:relative;margin-bottom:18px;">
-          <div style="position:absolute;top:0;left:0;height:100%;width:40%;background:linear-gradient(90deg,#ef4444,#eab308,#2563eb);border-radius:9999px;animation:preloaderAnim 1.2s ease-in-out infinite alternate;"></div>
-        </div>
-
-        <!-- Direct Entry Button (Pòt Antre Dirèk) -->
-        <a href="#root" id="direct-enter-btn" onclick="var p=document.getElementById('pre-loader');if(p){p.style.opacity='0';setTimeout(function(){p.remove();},300);}" style="display:inline-flex;align-items:center;gap:8px;padding:9px 24px;border-radius:9999px;background:linear-gradient(90deg,#ef4444,#2563eb);color:#ffffff;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 6px 20px rgba(239,68,68,0.35);cursor:pointer;">
-          Antre sou UpMizik &rarr;
-        </a>
-
-        <style>
-          @keyframes preloaderAnim {
-            0% { left: 0%; width: 25%; }
-            50% { width: 55%; }
-            100% { left: 75%; width: 25%; }
-          }
-        </style>
-      </div>
-
       <!-- Crawlable & Fallback Entrance for Search Engines & Non-JS Browsers -->
       <noscript>
         <div style="background:#05070a;color:#ffffff;padding:40px 20px;text-align:center;min-height:100vh;">
@@ -129,33 +99,6 @@
       </noscript>
     </div>
 
-    <!-- Auto-Fade Pre-Loader Script: Ensures pre-loader fades out quickly and never blocks any visitor -->
-    <script>
-      (function() {
-        var dismissed = false;
-        function dismissPreloader() {
-          if (dismissed) return;
-          var pl = document.getElementById('pre-loader');
-          if (pl) {
-            pl.style.transition = 'opacity 0.35s ease, transform 0.35s ease';
-            pl.style.opacity = '0';
-            pl.style.transform = 'scale(0.98)';
-            setTimeout(function() {
-              if (pl && pl.parentNode) {
-                pl.parentNode.removeChild(pl);
-              }
-            }, 360);
-          }
-          dismissed = true;
-        }
-
-        // Auto dismiss after 900ms so users enter smoothly
-        setTimeout(dismissPreloader, 900);
-        window.addEventListener('load', function() {
-          setTimeout(dismissPreloader, 200);
-        });
-      })();
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

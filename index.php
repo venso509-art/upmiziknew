@@ -69,7 +69,8 @@ if (empty($musiques)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UpMizik - Platfòm Mizik Ayisyen & Sipò Dirèk Pou Atis</title>
+    <title>UpMizik - Platfòm Difizyon Mizik Kreyòl & Sipò Dirèk Pou Atis Ayisyen</title>
+    <meta name="google-site-verification" content="nitk5SRy6ObVzKGdxYtreomK4Akxd0QKISRozzPTbz4">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

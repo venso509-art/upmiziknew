@@ -22,7 +22,7 @@ const getInitialApiBaseUrl = (): string => {
 
 const API_BASE_URL = getInitialApiBaseUrl();
 
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 9000): Promise<Response> {
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 3500): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
