@@ -74,8 +74,8 @@ export const SecretAdminDesktopInstaller: React.FC<SecretAdminDesktopInstallerPr
             <Monitor className="w-8 h-8" />
           </div>
           <div>
-            <h2 className="text-xl font-black text-white font-['Cabinet_Grotesk',sans-serif] tracking-tight">
-              UpMizik Admin Desk
+            <h2 className="text-xl font-black font-['Cabinet_Grotesk',sans-serif] tracking-tight">
+              <span className="text-red-500">Up</span><span className="text-blue-500">Mizik</span> <span className="text-white">Admin Desk</span>
             </h2>
             <p className="text-xs text-amber-300 font-medium">
               Aplikasyon Biwo Dedye (Standalone Desktop)

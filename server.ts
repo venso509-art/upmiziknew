@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -306,6 +307,8 @@ app.all(['/backend/api/settings.php', '/api/settings'], (req, res) => {
 // 5. VITE DEV SERVER OR STATIC PROD
 // ==========================================
 async function startServer() {
+  const server = http.createServer(app);
+
   if (process.env.NODE_ENV === 'production' && fs.existsSync(path.join(__dirname, 'dist'))) {
     app.use(express.static(path.join(__dirname, 'dist')));
     app.get('*', (req, res) => {
@@ -314,13 +317,16 @@ async function startServer() {
   } else {
     const { createServer } = await import('vite');
     const vite = await createServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: { server }
+      },
       appType: 'spa'
     });
     app.use(vite.middlewares);
   }
 
-  app.listen(Number(PORT), '0.0.0.0', () => {
+  server.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`[UpMizik Server] Running on http://0.0.0.0:${PORT}`);
   });
 }

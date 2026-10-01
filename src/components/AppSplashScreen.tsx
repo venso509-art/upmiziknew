@@ -116,8 +116,8 @@ export const AppSplashScreen: React.FC<AppSplashScreenProps> = ({
 
         {/* Brand Name: UPMIZIK */}
         <div className="flex items-center justify-center gap-2 mb-2">
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white font-['Cabinet_Grotesk',sans-serif]">
-            Up<span className="text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,0.6)]">Mizik</span>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight font-['Cabinet_Grotesk',sans-serif]">
+            <span className="text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,0.6)]">Up</span><span className="text-blue-500 drop-shadow-[0_0_20px_rgba(37,99,235,0.6)]">Mizik</span>
           </h1>
           <span className="text-[11px] font-extrabold uppercase tracking-widest bg-yellow-400 text-slate-950 px-2 py-0.5 rounded shadow-md">
             Ayiti

@@ -34,8 +34,8 @@ export const Footer: React.FC<FooterProps> = ({
                   <span className="w-[2.5px] bg-yellow-300 rounded-full h-1.5"></span>
                 </div>
               </div>
-              <span className="text-xl font-black text-white font-['Cabinet_Grotesk',sans-serif]">
-                Up<span className="text-red-500">Mizik</span>
+              <span className="text-xl font-black font-['Cabinet_Grotesk',sans-serif]">
+                <span className="text-red-500">Up</span><span className="text-blue-500">Mizik</span>
               </span>
               <span className="text-[10px] font-bold uppercase bg-yellow-400 text-slate-950 px-2 py-0.5 rounded-md">
                 Ayiti

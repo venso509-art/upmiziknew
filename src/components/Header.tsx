@@ -132,8 +132,8 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-xl sm:text-2xl font-black tracking-tight text-white font-['Cabinet_Grotesk',sans-serif]">
-                  Up<span className="text-red-500">Mizik</span>
+                <span className="text-xl sm:text-2xl font-black tracking-tight font-['Cabinet_Grotesk',sans-serif]">
+                  <span className="text-red-500">Up</span><span className="text-blue-500">Mizik</span>
                 </span>
                 <span className="text-[10px] font-extrabold uppercase tracking-wider bg-yellow-400 text-slate-950 px-1.5 py-0.5 rounded shadow-sm">
                   Ayiti

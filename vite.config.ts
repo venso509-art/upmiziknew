@@ -10,6 +10,7 @@ export default defineConfig(() => {
       react(),
       tailwindcss(),
       VitePWA({
+        injectRegister: null,
         registerType: 'autoUpdate',
         includeAssets: ['apple-touch-icon.png', 'upmizik-logo.svg', 'pwa-192x192.png', 'pwa-512x512.png'],
         manifest: {
@@ -79,8 +80,7 @@ export default defineConfig(() => {
           ],
         },
         devOptions: {
-          enabled: true,
-          type: 'module',
+          enabled: false,
         },
       }),
     ],
@@ -99,8 +99,8 @@ export default defineConfig(() => {
       minify: 'esbuild' as const,
     },
     server: {
-      hmr: process.env.DISABLE_HMR !== 'true',
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      hmr: false,
+      watch: null,
     },
   };
 });

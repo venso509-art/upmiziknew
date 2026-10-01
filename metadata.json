@@ -1,6 +1,6 @@
 {
   "name": "UpMizik",
-  "description": "Platfòm mizik ayisyen pou difizyon ak sipò dirèk pou jèn atis yo.",
+  "description": "Platfòm Difizyon Mizik Kreyòl & Sipò Dirèk Pou Atis Ayisyen.",
   "requestFramePermissions": [
     "camera",
     "microphone"
