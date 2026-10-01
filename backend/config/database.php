@@ -81,53 +81,28 @@ if (!function_exists('getDBConnection')) {
             }
         }
 
-        $primaryHost = defined('DB_HOST') && !empty(DB_HOST) ? DB_HOST : 'upmizik-db';
-        if ($primaryHost === '2.25.132.44' || str_contains($primaryHost, '2.25.132.44') || $primaryHost === 'bva4ne7esmb8nw0ri0oscbec') {
-            $primaryHost = 'upmizik-db';
-        }
-
+        $rawHost = defined('DB_HOST') && !empty(DB_HOST) ? DB_HOST : 'upmizik-db';
+        
+        // Hosts to try in priority order: configured host, Coolify service ID, Docker compose service name, localhost
         $hostsToTry = array_unique(array_filter([
-            $primaryHost,
+            $rawHost,
             'upmizik-db',
+            'bva4ne7esmb8nw0ri0oscbec',
             'db',
-            'mysql',
             '127.0.0.1',
-            'localhost',
             $gatewayIp
         ]));
 
+        $primaryUser = defined('DB_USER') ? DB_USER : 'upmizikuser';
+        $primaryPass = defined('DB_PASS') ? DB_PASS : 'WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs';
+        $primaryDb   = defined('DB_NAME') ? DB_NAME : 'upmiziknew';
+
         $credentialsToTry = [
-            [
-                'user' => defined('DB_USER') ? DB_USER : 'upmizikuser',
-                'pass' => defined('DB_PASS') ? DB_PASS : 'WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs'
-            ],
-            [
-                'user' => 'upmiziknew',
-                'pass' => 'WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs'
-            ],
-            [
-                'user' => 'upmizikuser',
-                'pass' => 'WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs'
-            ],
-            [
-                'user' => 'upmizik_user',
-                'pass' => 'upmizik_secure_pass_2026'
-            ],
-            [
-                'user' => 'root',
-                'pass' => 'WLTsFLQlDffJzHxEIpr255SlXA9PS418uFYCBciPi6V8sj7358IjiQJ3XFInLUxs'
-            ],
-            [
-                'user' => 'root',
-                'pass' => 'root_secure_pass_2026'
-            ]
+            ['user' => $primaryUser, 'pass' => $primaryPass],
+            ['user' => 'root', 'pass' => $primaryPass]
         ];
 
-        $databasesToTry = array_unique(array_filter([
-            defined('DB_NAME') ? DB_NAME : 'upmiziknew',
-            'upmiziknew',
-            'upmizik_db'
-        ]));
+        $databasesToTry = array_unique(array_filter([$primaryDb, 'upmiziknew', 'upmizik_db']));
 
         $lastException = null;
         $connectedHost = null;
@@ -142,19 +117,13 @@ if (!function_exists('getDBConnection')) {
         ];
 
         foreach ($hostsToTry as $candidateHost) {
-            // Tcheke rapidman si pò 3306 la ouvè avèk stream_socket_client (max 0.8s) pou anpeche 504 Gateway Timeout
-            $targetPort = defined('DB_PORT') ? DB_PORT : 3306;
-            $probe = @stream_socket_client("tcp://{$candidateHost}:{$targetPort}", $probeErrno, $probeErrstr, 0.8);
-            if (!$probe) {
-                // Host sa a pa reponn sou pò 3306, pa pèdi tan sou li
-                continue;
-            }
-            fclose($probe);
-
+            $targetPort = defined('DB_PORT') ? (int)DB_PORT : 3306;
+            
+            // Test connection directly with PDO (1s timeout)
             foreach ($credentialsToTry as $cred) {
                 foreach ($databasesToTry as $candidateDb) {
                     try {
-                        $dsn = "mysql:host={$candidateHost};port=" . DB_PORT . ";dbname={$candidateDb};charset=utf8mb4";
+                        $dsn = "mysql:host={$candidateHost};port={$targetPort};dbname={$candidateDb};charset=utf8mb4";
                         $testPdo = new PDO($dsn, $cred['user'], $cred['pass'], $options);
                         $pdo = $testPdo;
                         $connectedHost = $candidateHost;
@@ -162,18 +131,6 @@ if (!function_exists('getDBConnection')) {
                         break 3;
                     } catch (PDOException $e) {
                         $lastException = $e;
-                        // Si se "Unknown database", eseye kreye l si posib
-                        if (str_contains($e->getMessage(), 'Unknown database') || $e->getCode() == 1049) {
-                            try {
-                                $rootDsn = "mysql:host={$candidateHost};port=" . DB_PORT . ";charset=utf8mb4";
-                                $rootPdo = new PDO($rootDsn, $cred['user'], $cred['pass'], $options);
-                                $rootPdo->exec("CREATE DATABASE IF NOT EXISTS `{$candidateDb}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
-                                $pdo = new PDO("mysql:host={$candidateHost};port=" . DB_PORT . ";dbname={$candidateDb};charset=utf8mb4", $cred['user'], $cred['pass'], $options);
-                                $connectedHost = $candidateHost;
-                                $connectedDb = $candidateDb;
-                                break 3;
-                            } catch (Throwable $ignore) {}
-                        }
                     }
                 }
             }
