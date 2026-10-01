@@ -1046,11 +1046,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const merged = realtimeFirestoreArtists.map(ca => {
         const la = localMap.get(ca.id);
         if (la) {
-          // If local has active or rejected status while cloud is still pending, trust local admin action
-          if (la.status && la.status !== 'pending' && ca.status === 'pending') {
-            return { ...ca, ...la, status: la.status };
-          }
-          return { ...ca, ...la };
+          return {
+            ...la,
+            ...ca,
+            status: (la.status && la.status !== 'pending' && ca.status === 'pending') ? la.status : ca.status,
+            registrationProofUrl: ca.registrationProofUrl || la.registrationProofUrl
+          };
         }
         return ca;
       });

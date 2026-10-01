@@ -19,10 +19,24 @@ const getInitialApiBaseUrl = (): string => {
       return `${window.location.origin}/backend/api`;
     }
   }
-  return 'https://upmizik.com/backend/api';
+  return 'https://www.upmizik.com/backend/api';
 };
 
 const API_BASE_URL = getInitialApiBaseUrl();
+
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 9000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    return response;
+  } finally {
+    clearTimeout(id);
+  }
+}
 
 class ApiService {
   private baseUrl: string = API_BASE_URL;
@@ -48,10 +62,10 @@ class ApiService {
       formData.append('file', file, customFileName || (file instanceof File ? file.name : 'upload.bin'));
       formData.append('type', type);
 
-      const response = await fetch(`${this.baseUrl}/upload.php`, {
+      const response = await fetchWithTimeout(`${this.baseUrl}/upload.php`, {
         method: 'POST',
         body: formData,
-      });
+      }, 10000);
 
       if (!response.ok) {
         throw new Error(`Erè HTTP: ${response.status}`);
@@ -59,9 +73,8 @@ class ApiService {
 
       const result = await response.json();
       return result;
-    } catch (error) {
+    } catch (error: any) {
       console.warn('[ApiService] Upload dirèk pa disponib nan preview lokal, fallback aktif.', error);
-      // Fallback pou anviwònman dev lokal si sèvè PHP a poko deplwaye
       return {
         success: false,
         url: '',
@@ -78,11 +91,11 @@ class ApiService {
     type: 'music' | 'covers' | 'proofs' | 'avatars' | 'banners' | 'media' = 'covers'
   ): Promise<{ success: boolean; url: string }> {
     try {
-      const response = await fetch(`${this.baseUrl}/upload.php`, {
+      const response = await fetchWithTimeout(`${this.baseUrl}/upload.php`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ base64Data, type }),
-      });
+      }, 10000);
 
       const result = await response.json();
       return result;
@@ -99,7 +112,7 @@ class ApiService {
   public async getArtists(status?: string): Promise<ArtistUser[]> {
     try {
       const url = status ? `${this.baseUrl}/artists.php?status=${status}` : `${this.baseUrl}/artists.php`;
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url, {}, 8000);
       const data = await res.json();
       const list = data.artists || data.data?.artists;
       if (!Array.isArray(list)) return [];
@@ -116,14 +129,27 @@ class ApiService {
 
   public async registerArtist(artistData: Partial<ArtistUser>): Promise<{ success: boolean; artistId?: string; message?: string }> {
     try {
-      const res = await fetch(`${this.baseUrl}/artists.php`, {
+      const res = await fetchWithTimeout(`${this.baseUrl}/artists.php`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(artistData),
-      });
-      return await res.json();
-    } catch (err) {
-      return { success: false, message: 'Erè enskripsyon' };
+      }, 10000);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        return {
+          success: false,
+          message: data?.message || (res.status === 409 ? 'Imèl sa a deja itilize sou yon lòt kont atis' : 'Erè enskripsyon')
+        };
+      }
+      return data || { success: true };
+    } catch (err: any) {
+      const isTimeout = err?.name === 'AbortError';
+      return { 
+        success: false, 
+        message: isTimeout 
+          ? 'Koneksyon ak sèvè a pran twòp tan. Tanpri verifye entènèt ou.' 
+          : (err?.message || 'Erè enskripsyon') 
+      };
     }
   }
 

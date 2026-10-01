@@ -204,8 +204,9 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       try {
-        const compressed = await compressAndReadFile(file, 800, 1000, 0.72);
+        const compressed = await compressAndReadFile(file, 500, 700, 0.65);
         setProofPreview(compressed);
+        setErrorMsg('');
         UpMizikAPI.uploadFile(file, 'proofs').then(res => {
           if (res && res.url) {
             setProofPreview(resolveMediaUrl(res.url));
@@ -401,21 +402,11 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
     const currentArtists = StorageService.getArtists();
 
     // 1. Tcheke si imèl sa a deja egziste sou sistèm nan
-    const matchByEmail = currentArtists.find(a => (a.email || '').trim().toLowerCase() === cleanEmail);
+    const matchByEmail = currentArtists.find(a => (a.email || '').trim().toLowerCase() === cleanEmail) ||
+      (existingArtists || []).find(a => (a.email || '').trim().toLowerCase() === cleanEmail);
     if (matchByEmail) {
-      const artName = matchByEmail.stageName || matchByEmail.name;
-      if (matchByEmail.status === 'active' || !matchByEmail.status) {
-        setErrorMsg(`Imèl "${cleanEmail}" la deja anrejistre epi valide pou atis "${artName}". Règleman sekirite UpMizik la entèdi plis pase yon enskripsyon sou menm imèl la. Tanpri klike sou tab "2. Konekte ak Kont Ou" pou w konekte.`);
-        return;
-      }
-      if (matchByEmail.status === 'pending') {
-        setErrorMsg(`Gen yon demand enskripsyon ki deja soumèt ak imèl "${cleanEmail}" la pou atis "${artName}" k ap tann validasyon pa administratè a (Mr clauvens). Ou pa ka kreye yon dezyèm kont sou menm imèl la. Tanpri ale nan "2. Konekte ak Kont Ou" pou w wè estati kont ou.`);
-        return;
-      }
-      if (matchByEmail.status === 'suspended') {
-        setErrorMsg(`Kont atis ki lye ak imèl sa a tanporèman sispann. Tanpri ale nan tab "2. Konekte ak Kont Ou" oswa kontakte sipò a.`);
-        return;
-      }
+      setErrorMsg('Imèl sa a deja itilize sou yon lòt kont atis');
+      return;
     }
 
     // 2. Tcheke si nimewo telefòn nan deja itilize pa yon lòt atis aktif
@@ -488,7 +479,7 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
 
         const regRes = await onRegisterArtist(finalArtist);
         if (regRes && typeof regRes === 'object' && !regRes.success) {
-          setErrorMsg(regRes.message || 'Imèl sa a deja anrejistre sou yon kont atis valide.');
+          setErrorMsg(regRes.message || 'Imèl sa a deja itilize sou yon lòt kont atis');
           return;
         }
 
@@ -532,7 +523,7 @@ export const ArtistAuthModal: React.FC<ArtistAuthModalProps> = ({
 
         const regRes = await onRegisterArtist(updatedArtist);
         if (regRes && typeof regRes === 'object' && !regRes.success) {
-          setErrorMsg(regRes.message || 'Imèl sa a deja anrejistre sou yon kont atis valide.');
+          setErrorMsg(regRes.message || 'Imèl sa a deja itilize sou yon lòt kont atis');
           return;
         }
 

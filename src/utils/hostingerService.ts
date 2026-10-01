@@ -209,11 +209,12 @@ class HostingerSyncService {
           for (const sa of serverArtists) {
             const la = localMap.get(sa.id);
             if (la) {
-              if (la.status && la.status !== 'pending' && sa.status === 'pending') {
-                merged.push({ ...sa, ...la, status: la.status });
-              } else {
-                merged.push({ ...sa, ...la });
-              }
+              merged.push({
+                ...la,
+                ...sa,
+                status: (la.status && la.status !== 'pending' && sa.status === 'pending') ? la.status : sa.status,
+                registrationProofUrl: sa.registrationProofUrl || la.registrationProofUrl
+              });
             } else {
               merged.push(sa);
             }
@@ -275,19 +276,22 @@ class HostingerSyncService {
       const all = StorageService.getArtists();
       const cleanEmail = (artist.email || '').trim().toLowerCase();
 
-      // Verifye si gen yon lòt atis ki deja aktif ak imèl sa a
+      // Verifye si gen yon lòt atis ki deja gen imèl sa a
       const existingMatch = all.find(a => a.id !== artist.id && (a.email || '').trim().toLowerCase() === cleanEmail);
-      if (existingMatch && (existingMatch.status === 'active' || !existingMatch.status)) {
+      if (existingMatch) {
         return {
           success: false,
-          message: `Imèl sa a deja anrejistre sou yon kont atis valide ("${existingMatch.stageName || existingMatch.name}"). Ou pa ka anrejistre yon lòt moun sou menm imèl la.`
+          message: 'Imèl sa a deja itilize sou yon lòt kont atis'
         };
       }
 
       // Voye nan backend Hostinger MySQL (POST upsert avèk ON DUPLICATE KEY UPDATE)
       const res = await UpMizikAPI.registerArtist(artist);
-      if (!res.success && res.message && (res.message.includes('deja anrejistre') || res.message.includes('already active') || res.message.includes('plizyè moun'))) {
-        return { success: false, message: res.message };
+      if (!res.success) {
+        return { 
+          success: false, 
+          message: res.message || 'Imèl sa a deja itilize sou yon lòt kont atis' 
+        };
       }
 
       const idx = all.findIndex((a) => a.id === artist.id);
@@ -302,13 +306,16 @@ class HostingerSyncService {
       this.emitChange('artists', updated);
 
       setTimeout(() => {
-        this.fetchArtistsAndNotify(true);
+        this.fetchArtistsAndNotify(true).catch(() => {});
       }, 400);
 
       return { success: true };
     } catch (e: any) {
       console.warn('[HostingerService] saveSingleArtist warn:', e);
-      return { success: true };
+      return { 
+        success: false, 
+        message: e?.message || 'Erè pandan kominikasyon ak baz done a.' 
+      };
     }
   }
 

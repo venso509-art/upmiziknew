@@ -229,7 +229,7 @@ if ($method === 'POST') {
             if ($existingStatus === 'actif' || $existingStatus === 'active') {
                 jsonResponse([
                     'success' => false,
-                    'message' => 'Imèl sa a (' . htmlspecialchars($email) . ') deja anrejistre epi valide pou atis "' . htmlspecialchars($registeredName) . '". Règleman sekirite UpMizik entèdi plizyè moun anrejistre sou menm imèl la. Tanpri konekte ak kont ou.',
+                    'message' => 'Imèl sa a deja itilize sou yon lòt kont atis',
                     'data' => null,
                     'errors' => ['Email already active on platform']
                 ], 409);
@@ -241,7 +241,7 @@ if ($method === 'POST') {
                 if (!empty($data['id']) && $data['id'] !== $existingRow['id']) {
                     jsonResponse([
                         'success' => false,
-                        'message' => 'Gen yon demand enskripsyon ki deja soumèt ak imèl sa a pou atis "' . htmlspecialchars($registeredName) . '" k ap tann validasyon admin. Ou pa ka kreye yon dezyèm kont sou menm imèl la.',
+                        'message' => 'Imèl sa a deja itilize sou yon lòt kont atis',
                         'data' => null,
                         'errors' => ['Email registration already pending']
                     ], 409);
