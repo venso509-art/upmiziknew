@@ -1,5 +1,6 @@
 /** UTF-8: UpMizik Panèl Administratè - Jere atis, mizik, peman ak sekirite **/
 import React, { useState, useMemo, useEffect } from 'react';
+import { AdminDesktopInstallBanner } from './AdminDesktopInstallBanner';
 import {
   AdminUser,
   MusicItem,
@@ -1730,6 +1731,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Standalone Desktop App (Option A) Installer Banner */}
+      <AdminDesktopInstallBanner />
 
       {/* Global Financial Quick Overview Bar with Dual USD & HTG */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

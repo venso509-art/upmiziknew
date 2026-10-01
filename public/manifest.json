@@ -1,18 +1,38 @@
 {
-  "name": "UpMizik - Difizyon Mizik Ayiti",
-  "short_name": "UpMizik",
-  "description": "Platfòm Difizyon Mizik Ayisyen ak Sipò Dirèk pou Jèn Atis yo.",
-  "start_url": "/",
+  "id": "/",
+  "name": "UpMizik Admin Desk",
+  "short_name": "UpMizikAdmin",
+  "description": "Aplikasyon Sant Kontwòl & Jesyon Administratif Platfòm UpMizik Ayiti",
+  "start_url": "/?admin_mode=true&standalone=true",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#05070a",
   "theme_color": "#05070a",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
     {
       "src": "/upmizik-logo.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }

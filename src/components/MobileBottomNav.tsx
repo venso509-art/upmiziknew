@@ -24,6 +24,7 @@ interface MobileBottomNavProps {
   themeMode: ThemeMode;
   onToggleTheme: () => void;
   pendingArtistsCount?: number;
+  isDesktopApp?: boolean;
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
@@ -38,7 +39,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   hasActivePlayer,
   themeMode,
   onToggleTheme,
-  pendingArtistsCount = 0
+  pendingArtistsCount = 0,
+  isDesktopApp = false
 }) => {
   return (
     <nav
@@ -127,35 +129,53 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           )}
         </button>
 
-        {/* 5. Admin / Tèm Toggle */}
-        <button
-          id="mobile-tab-admin-btn"
-          onClick={() => {
-            if (currentAdmin) {
-              setCurrentView('admin_dashboard');
-            } else {
-              onOpenAdminAuth();
-            }
-          }}
-          className={`relative flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all select-none min-w-[56px] ${
-            currentView === 'admin_dashboard'
-              ? 'text-yellow-400 bg-yellow-400/15 font-bold shadow-inner'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-          title={currentAdmin && pendingArtistsCount > 0 ? `${pendingArtistsCount} nouvo atis an atant validasyon` : 'Espas Administratè'}
-        >
-          <div className="relative flex items-center justify-center">
-            <ShieldCheck className={`w-5 h-5 ${currentAdmin ? 'text-yellow-400' : 'text-slate-400'}`} />
-            {Boolean(currentAdmin) && pendingArtistsCount > 0 && (
-              <span className="absolute -top-1.5 -right-2 px-1 min-w-[15px] h-3.5 rounded-full bg-red-500 text-white text-[9px] font-mono font-black flex items-center justify-center shadow-md shadow-red-500/50 animate-pulse">
-                {pendingArtistsCount}
-              </span>
+        {/* 5. Admin Desk (si Desktop App oswa konekte) / Tèm Toggle (pou vizitè mobil) */}
+        {(isDesktopApp || currentAdmin) ? (
+          <button
+            id="mobile-tab-admin-btn"
+            onClick={() => {
+              if (currentAdmin) {
+                setCurrentView('admin_dashboard');
+              } else {
+                onOpenAdminAuth();
+              }
+            }}
+            className={`relative flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all select-none min-w-[56px] ${
+              currentView === 'admin_dashboard'
+                ? 'text-yellow-400 bg-yellow-400/15 font-bold shadow-inner'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title={currentAdmin && pendingArtistsCount > 0 ? `${pendingArtistsCount} nouvo atis an atant validasyon` : 'UpMizik Admin Desk'}
+          >
+            <div className="relative flex items-center justify-center">
+              <ShieldCheck className={`w-5 h-5 ${currentAdmin ? 'text-yellow-400' : 'text-slate-400'}`} />
+              {Boolean(currentAdmin) && pendingArtistsCount > 0 && (
+                <span className="absolute -top-1.5 -right-2 px-1 min-w-[15px] h-3.5 rounded-full bg-red-500 text-white text-[9px] font-mono font-black flex items-center justify-center shadow-md shadow-red-500/50 animate-pulse">
+                  {pendingArtistsCount}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] mt-0.5 tracking-tight font-medium">
+              Admin
+            </span>
+          </button>
+        ) : (
+          <button
+            id="mobile-tab-theme-btn"
+            onClick={onToggleTheme}
+            className="flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all select-none min-w-[56px] text-slate-400 hover:text-slate-200"
+            title={themeMode === 'dark' ? 'Chanje pou Mòd Klè' : 'Chanje pou Mòd Nwit'}
+          >
+            {themeMode === 'dark' ? (
+              <Sun className="w-5 h-5 text-amber-400" />
+            ) : (
+              <Moon className="w-5 h-5 text-blue-400" />
             )}
-          </div>
-          <span className="text-[10px] mt-0.5 tracking-tight font-medium">
-            {currentAdmin ? 'Admin' : 'Admin'}
-          </span>
-        </button>
+            <span className="text-[10px] mt-0.5 tracking-tight font-medium">
+              {themeMode === 'dark' ? 'Mòd Nwit' : 'Mòd Klè'}
+            </span>
+          </button>
+        )}
 
       </div>
     </nav>

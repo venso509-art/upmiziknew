@@ -37,7 +37,9 @@ import { ArtistProfileModal } from './components/ArtistProfileModal';
 import { ShareModal } from './components/ShareModal';
 import { ArtistAuthModal } from './components/ArtistAuthModal';
 import { AdminAuthModal } from './components/AdminAuthModal';
+import { SecretAdminDesktopInstaller } from './components/SecretAdminDesktopInstaller';
 import { ArtistDashboard } from './components/ArtistDashboard';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { AdminDashboard, DEFAULT_HTG_EXCHANGE_RATE } from './components/AdminDashboard';
 import { GlobalAudioPlayer } from './components/GlobalAudioPlayer';
 import { Footer } from './components/Footer';
@@ -243,6 +245,39 @@ export default function App() {
   const [selectedArtistForProfile, setSelectedArtistForProfile] = useState<ArtistUser | null>(null);
   const [showArtistAuth, setShowArtistAuth] = useState(false);
   const [showAdminAuth, setShowAdminAuth] = useState(false);
+
+  // Pòtay Sekirite Prive pou Enstale App Desk (Se sèlman lè lyen sekrè a itilize)
+  const [showSecretInstaller, setShowSecretInstaller] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.location.search.includes('admin_install_secret=upmizik_desk_clauvens_2026');
+  });
+
+  // Deteksyon mòd Aplikasyon Biwo UpMizik Admin Desk (Standalone Desktop App)
+  const [isDesktopApp, setIsDesktopApp] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return Boolean(
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
+      window.location.search.includes('standalone=true') ||
+      window.location.search.includes('admin_mode=true')
+    );
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(display-mode: standalone)');
+    const updateMode = () => {
+      const standalone = Boolean(
+        mediaQuery.matches ||
+        (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
+        window.location.search.includes('standalone=true') ||
+        window.location.search.includes('admin_mode=true')
+      );
+      setIsDesktopApp(standalone);
+    };
+    mediaQuery.addEventListener?.('change', updateMode);
+    return () => mediaQuery.removeEventListener?.('change', updateMode);
+  }, []);
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [offlineModalInitialTab, setOfflineModalInitialTab] = useState<'playlists' | 'queue' | 'add'>('playlists');
 
@@ -406,15 +441,28 @@ export default function App() {
     }
 
     const savedAdmin = StorageService.getLoggedInAdmin();
+    const isDeskLaunch = typeof window !== 'undefined' && (
+      window.location.search.includes('admin_mode=true') ||
+      window.location.search.includes('standalone=true') ||
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true
+    );
+
     if (savedAdmin && savedAdmin.role === 'super_admin') {
       setCurrentAdmin(savedAdmin);
       // Only load sensitive financial data if admin is verified
       setDonations(StorageService.getDonations(savedAdmin));
       setArchives(StorageService.getArchives(savedAdmin));
+      if (isDeskLaunch) {
+        setCurrentView('admin_dashboard');
+      }
     } else {
       // Keep financial records completely empty in memory for public users
       setDonations([]);
       setArchives([]);
+      if (isDeskLaunch) {
+        setShowAdminAuth(true);
+      }
     }
 
     // Cloud Firestore & MySQL Sync in background
@@ -1661,6 +1709,7 @@ export default function App() {
         onOpenOfflineModal={() => handleOpenOfflineModal('playlists')}
         offlineTracksCount={cachedTrackIds.length}
         onOpenFontSelector={() => setShowFontModal(true)}
+        isDesktopApp={isDesktopApp}
       />
 
       {/* Offline & Intermittent Connectivity Banner */}
@@ -1929,6 +1978,7 @@ export default function App() {
         themeMode={themeMode}
         onToggleTheme={handleToggleTheme}
         pendingArtistsCount={currentAdmin ? artists.filter((a) => a && a.status === 'pending').length : 0}
+        isDesktopApp={isDesktopApp}
       />
 
       {/* Footer */}
@@ -2048,6 +2098,17 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL 5.5: SECRET PRIVATE DESKTOP APP INSTALLER (ONLY OPENED VIA PRIVATE LINK) */}
+      {showSecretInstaller && (
+        <SecretAdminDesktopInstaller
+          onClose={() => setShowSecretInstaller(false)}
+          onInstalledSuccess={() => {
+            setShowSecretInstaller(false);
+            setCurrentView('admin_dashboard');
+          }}
+        />
+      )}
+
       {/* MODAL 6: DEEP LINK & SOCIAL STORY SHARING MODAL */}
       {musicToShare && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center">
@@ -2090,6 +2151,9 @@ export default function App() {
           />
         </div>
       )}
+
+      {/* OFFLINE CONNECTIVITY INDICATOR */}
+      <OfflineIndicator />
 
     </div>
   );

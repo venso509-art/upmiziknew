@@ -44,6 +44,7 @@ interface HeaderProps {
   offlineTracksCount?: number;
   onOpenFontSelector?: () => void;
   pendingArtistsCount?: number;
+  isDesktopApp?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -71,7 +72,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenOfflineModal,
   offlineTracksCount = 0,
   onOpenFontSelector,
-  pendingArtistsCount: externalPendingCount
+  pendingArtistsCount: externalPendingCount,
+  isDesktopApp = false
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -339,16 +341,16 @@ export const Header: React.FC<HeaderProps> = ({
                   <LogOut className="w-4 h-4" />
                 </button>
               </div>
-            ) : (
+            ) : (isDesktopApp || currentAdmin) ? (
               <button
                 id="nav-admin-login-btn"
                 onClick={onOpenAdminAuth}
                 className="relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[#0d1424] hover:bg-[#131c33] text-slate-300 hover:text-white border border-white/[0.08] transition-all"
               >
                 <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
-                <span>Admin</span>
+                <span>Admin Desk</span>
               </button>
-            )}
+            ) : null}
           </div>
 
           {/* Mobile Right Controls (Theme Toggle + Quick Atis / Avatar + Hamburger Toggle) */}
@@ -561,16 +563,16 @@ export const Header: React.FC<HeaderProps> = ({
                   Dekonekte
                 </button>
               </div>
-            ) : (
+            ) : (isDesktopApp || currentAdmin) ? (
               <button
                 id="mobile-drawer-admin-login-btn"
                 onClick={() => { onOpenAdminAuth(); setMobileMenuOpen(false); }}
                 className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white"
               >
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Koneksyon Administratè</span>
+                <span>Koneksyon Admin Desk</span>
               </button>
-            )}
+            ) : null}
 
             {currentArtist && (
               <button
