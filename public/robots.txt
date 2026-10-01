@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /?admin_mode=true
+Disallow: /?admin_install_secret=*
+
+Sitemap: https://www.upmizik.com/sitemap.xml
