@@ -262,18 +262,20 @@ export const RecommendedSection: React.FC<RecommendedSectionProps> = ({
                   </div>
 
                   {/* Metrics Row: Listens & Shares */}
-                  <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-400">
-                    <span className="flex items-center gap-1">
-                      <Headphones className="w-3 h-3 text-cyan-400" />
-                      <strong className="text-slate-200">{music.listens.toLocaleString()}</strong>
+                  <div className="flex items-center gap-2 mt-2 text-[11px] text-slate-400">
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-yellow-400/10 border border-yellow-400/20 text-yellow-300" title={`${music.listens.toLocaleString()} ekout`}>
+                      <Headphones className="w-3 h-3 text-yellow-400" />
+                      <strong className="text-white font-mono">{music.listens.toLocaleString()}</strong>
+                      <span className="text-[10px] text-yellow-300/80">ekout</span>
                     </span>
-                    <span className="flex items-center gap-1">
-                      <Share2 className="w-3 h-3 text-blue-400" />
-                      <strong className="text-slate-200">{(music.sharesCount || 0).toLocaleString()}</strong>
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-300" title={`${music.sharesCount || 0} pataj`}>
+                      <Share2 className="w-3 h-3 text-cyan-400" />
+                      <strong className="text-white font-mono">{(music.sharesCount || 0).toLocaleString()}</strong>
+                      <span className="text-[10px] text-cyan-300/80">pataj</span>
                     </span>
                     {music.totalDonations > 0 && (
-                      <span className="text-yellow-400 font-bold text-[10px]">
-                        ${music.totalDonations.toFixed(0)}
+                      <span className="text-yellow-400 font-bold text-[10px] px-2 py-0.5 rounded-lg bg-yellow-400/10 border border-yellow-400/20">
+                        ${music.totalDonations.toFixed(0)} Sipò
                       </span>
                     )}
                   </div>

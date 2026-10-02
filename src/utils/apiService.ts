@@ -183,6 +183,38 @@ class ApiService {
     }
   }
 
+  public async setArtistStatus(artistId: string, status: 'active' | 'pending' | 'rejected' | 'suspended', reason?: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/artists.php`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: artistId,
+          status,
+          registrationRejectionReason: reason,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      return !!data?.success;
+    } catch {
+      return false;
+    }
+  }
+
+  public async deleteArtist(artistId: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/artists.php?id=${encodeURIComponent(artistId)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json().catch(() => null);
+      return !!data?.success;
+    } catch (err) {
+      console.warn('[ApiService] deleteArtist error:', err);
+      return false;
+    }
+  }
+
   // ----------------------------------------------------------
   // MIZIK (MUSICS)
   // ----------------------------------------------------------
@@ -201,7 +233,7 @@ class ApiService {
       return list.map((m: MusicItem) => ({
         ...m,
         coverUrl: resolveMediaUrl(m.coverUrl, DEFAULT_SONG_COVER),
-        audioUrl: resolveMediaUrl(m.audioUrl),
+        audioUrl: resolveMediaUrl(m.audioUrl, ''),
       }));
     } catch {
       return [];

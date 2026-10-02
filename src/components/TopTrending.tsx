@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trophy, Play, Pause, HeartHandshake, Eye, Flame, Crown, Music, Sparkles, Share2, PlusCircle, ArrowUpRight } from 'lucide-react';
+import { Trophy, Play, Pause, HeartHandshake, Eye, Headphones, Flame, Crown, Music, Sparkles, Share2, PlusCircle, ArrowUpRight } from 'lucide-react';
 import { MusicItem } from '../types';
 import { ArtistBadge } from './ArtistBadge';
 import { getBadgeByDonations } from '../utils/badgeSystem';
@@ -185,17 +185,19 @@ export const TopTrending: React.FC<TopTrendingProps> = ({
                         <ArtistBadge donations={music.totalDonations} size="xs" />
                       </div>
 
-                      <div className="flex items-center gap-3 mt-2.5 text-xs text-slate-400 flex-wrap">
-                        <span className="flex items-center gap-1" title={`${music.listens.toLocaleString()} ekout`}>
-                          <Eye className="w-3.5 h-3.5 text-blue-400" />
-                          <strong className="text-slate-200">{music.listens.toLocaleString()}</strong>
+                      <div className="flex items-center gap-2 mt-2.5 text-xs text-slate-400 flex-wrap">
+                        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-yellow-400/10 border border-yellow-400/25 text-yellow-300" title={`${music.listens.toLocaleString()} ekout`}>
+                          <Headphones className="w-3.5 h-3.5 text-yellow-400" />
+                          <strong className="text-white font-mono">{music.listens.toLocaleString()}</strong>
+                          <span className="text-[10px] text-yellow-300/80 font-medium">ekout</span>
                         </span>
-                        <span className="flex items-center gap-1" title={`${music.sharesCount || 0} pataj`}>
-                          <Share2 className="w-3 h-3 text-cyan-400" />
-                          <strong className="text-slate-200">{(music.sharesCount || 0).toLocaleString()}</strong>
+                        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/25 text-cyan-300" title={`${music.sharesCount || 0} pataj`}>
+                          <Share2 className="w-3.5 h-3.5 text-cyan-400" />
+                          <strong className="text-white font-mono">{(music.sharesCount || 0).toLocaleString()}</strong>
+                          <span className="text-[10px] text-cyan-300/80 font-medium">pataj</span>
                         </span>
                         {music.totalDonations > 0 && (
-                          <span className="text-yellow-400 font-semibold bg-yellow-400/10 px-2 py-0.5 rounded-md border border-yellow-400/20 text-[10px]">
+                          <span className="text-yellow-400 font-semibold bg-yellow-400/10 px-2 py-1 rounded-lg border border-yellow-400/20 text-[10px]">
                             ${music.totalDonations.toFixed(0)} Sipò
                           </span>
                         )}

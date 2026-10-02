@@ -68,6 +68,7 @@ const KEYS = {
   ADMIN_LOCKOUT: 'upmizik_admin_lockout_v1',
   ARTIST_RATE_LIMITS: 'upmizik_artist_rate_limits_v1',
   SITE_VISITS: 'upmizik_site_visits_v1',
+  REMOVED_ARTISTS: 'upmizik_removed_artists_v2',
 };
 
 export const DEFAULT_PAYMENT_SETTINGS: PaymentSettingsConfig = {
@@ -401,8 +402,9 @@ export const StorageService = {
     const list = getStoredData<MusicItem[]>(KEYS.MUSIC, INITIAL_MUSIC);
     const enhanced = list.map((m, idx) => {
       let updated = { ...m };
-      if (typeof updated.sharesCount === 'undefined') {
-        updated.sharesCount = Math.floor((m.listens || 100) / 750) + 1;
+      // Nouvo moso oswa moso ki poko gen ekout dwe kòmanse ak 0 pataj, pa atifisyèlman 1
+      if (typeof updated.sharesCount === 'undefined' || ((!updated.listens || updated.listens === 0) && updated.sharesCount === 1)) {
+        updated.sharesCount = 0;
       }
       if (!updated.status) {
         updated.status = 'active';
@@ -1164,11 +1166,20 @@ export const StorageService = {
     return updatedArtist;
   },
 
+  getRemovedArtists: (): ArtistUser[] => {
+    return getStoredData<ArtistUser[]>(KEYS.REMOVED_ARTISTS, []);
+  },
+
+  saveRemovedArtists: (artists: ArtistUser[]) => {
+    setStoredData(KEYS.REMOVED_ARTISTS, artists);
+  },
+
   suspendArtist: (
     artistId: string,
     days: number,
     reason?: string,
-    adminName = 'Mr clauvens'
+    adminName = 'Mr clauvens',
+    hideSongs = true
   ): {
     artist: ArtistUser | null;
     generatedEmail: ArtistInboxMessage | null;
@@ -1179,7 +1190,8 @@ export const StorageService = {
 
     const now = new Date();
     const suspendedAt = now.toISOString();
-    const suspendedUntil = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+    const isIndefinite = days <= 0 || days === -1;
+    const suspendedUntil = isIndefinite ? 'indefinite' : new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
     const defaultReason = reason?.trim() || 'Vyolasyon règ ak kondisyon itilizasyon platfòm UpMizik la';
 
     const updated = list.map(a => {
@@ -1189,14 +1201,37 @@ export const StorageService = {
           status: 'suspended',
           suspendedAt,
           suspendedUntil,
-          suspensionDays: days,
-          suspensionReason: defaultReason
+          suspensionDays: isIndefinite ? -1 : days,
+          suspensionReason: defaultReason,
+          removedAt: suspendedAt,
+          removedBy: adminName,
+          removalReason: defaultReason,
+          isPermanentlyRemoved: isIndefinite
         };
         return suspendedArtist;
       }
       return a;
     });
     setStoredData(KEYS.ARTISTS, updated);
+
+    // Hide or unpublish songs if requested
+    if (hideSongs) {
+      const musicList = StorageService.getMusic();
+      const updatedMusic = musicList.map(m => {
+        if (m.artistId === artistId) {
+          return { ...m, status: 'rejected' as const, rejectionReason: `Atis sispann: ${defaultReason}` };
+        }
+        return m;
+      });
+      StorageService.saveMusic(updatedMusic);
+    }
+
+    // Also update archive registry so it is tracked
+    if (suspendedArtist) {
+      const removedList = StorageService.getRemovedArtists();
+      const filtered = removedList.filter(a => a.id !== artistId);
+      StorageService.saveRemovedArtists([suspendedArtist, ...filtered]);
+    }
 
     // If currently logged-in artist is this artist, update session too
     const currentLoggedIn = StorageService.getLoggedInArtist();
@@ -1207,7 +1242,7 @@ export const StorageService = {
     if (suspendedArtist) {
       generatedEmail = StorageService.sendArtistSuspensionEmail(
         suspendedArtist,
-        days,
+        isIndefinite ? 9999 : days,
         defaultReason,
         suspendedUntil,
         adminName
@@ -1230,25 +1265,52 @@ export const StorageService = {
     artist: ArtistUser | null;
     generatedEmail: ArtistInboxMessage | null;
   } => {
-    const list = StorageService.getArtists();
+    let list = StorageService.getArtists();
     let reactivatedArtist: ArtistUser | null = null;
     let generatedEmail: ArtistInboxMessage | null = null;
 
-    const updated = list.map(a => {
-      if (a.id === artistId) {
-        reactivatedArtist = {
-          ...a,
-          status: 'active',
-          suspendedAt: undefined,
-          suspendedUntil: undefined,
-          suspensionDays: undefined,
-          suspensionReason: undefined
-        };
-        return reactivatedArtist;
+    // Check if artist is in active list or in removed list
+    const foundInActive = list.find(a => a.id === artistId);
+    const removedList = StorageService.getRemovedArtists();
+    const foundInRemoved = removedList.find(a => a.id === artistId);
+
+    const baseArtist = foundInActive || foundInRemoved;
+
+    if (baseArtist) {
+      reactivatedArtist = {
+        ...baseArtist,
+        status: 'active',
+        suspendedAt: undefined,
+        suspendedUntil: undefined,
+        suspensionDays: undefined,
+        suspensionReason: undefined,
+        removedAt: undefined,
+        removedBy: undefined,
+        removalReason: undefined,
+        isPermanentlyRemoved: false
+      };
+
+      if (foundInActive) {
+        list = list.map(a => (a.id === artistId ? reactivatedArtist! : a));
+      } else {
+        list = [reactivatedArtist, ...list];
       }
-      return a;
-    });
-    setStoredData(KEYS.ARTISTS, updated);
+      setStoredData(KEYS.ARTISTS, list);
+
+      // Remove from removed archive
+      const updatedRemoved = removedList.filter(a => a.id !== artistId);
+      StorageService.saveRemovedArtists(updatedRemoved);
+
+      // Reactivate all songs of this artist
+      const musicList = StorageService.getMusic();
+      const updatedMusic = musicList.map(m => {
+        if (m.artistId === artistId) {
+          return { ...m, status: 'active' as const, rejectionReason: undefined };
+        }
+        return m;
+      });
+      StorageService.saveMusic(updatedMusic);
+    }
 
     const currentLoggedIn = StorageService.getLoggedInArtist();
     if (currentLoggedIn && currentLoggedIn.id === artistId && reactivatedArtist) {
@@ -1268,14 +1330,37 @@ export const StorageService = {
     return { artist: reactivatedArtist, generatedEmail };
   },
 
+  reintegrateArtist: (artistId: string, adminName = 'Mr clauvens') => {
+    return StorageService.reactivateArtist(artistId, adminName);
+  },
+
   deleteArtist: (
     artistId: string,
-    deleteAssociatedSongs = true
+    deleteAssociatedSongs = true,
+    permanentPurge = false
   ): { success: boolean; deletedSongsCount: number; deletedArtist: ArtistUser | null } => {
     const list = StorageService.getArtists();
     const targetArtist = list.find(a => a.id === artistId) || null;
     const updatedArtists = list.filter(a => a.id !== artistId);
     setStoredData(KEYS.ARTISTS, updatedArtists);
+
+    if (targetArtist && !permanentPurge) {
+      // Archive to REMOVED_ARTISTS so admin can re-integrate if desired
+      const archivedRecord: ArtistUser = {
+        ...targetArtist,
+        status: 'retired',
+        removedAt: new Date().toISOString(),
+        isPermanentlyRemoved: true,
+        removalReason: targetArtist.suspensionReason || 'Retire sou platfòm nan pa administratè a'
+      };
+      const removedList = StorageService.getRemovedArtists();
+      const filtered = removedList.filter(a => a.id !== artistId);
+      StorageService.saveRemovedArtists([archivedRecord, ...filtered]);
+    } else if (permanentPurge) {
+      const removedList = StorageService.getRemovedArtists();
+      const filtered = removedList.filter(a => a.id !== artistId);
+      StorageService.saveRemovedArtists(filtered);
+    }
 
     let deletedSongsCount = 0;
     if (deleteAssociatedSongs) {

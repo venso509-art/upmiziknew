@@ -71,7 +71,7 @@ export interface ArtistUser {
   musicalInfluences?: string; // Enspirasyon & atis ki enfliyanse w
   artisticVision?: string; // Vizyon & sa w vle pote nan kilti a
   artistQuote?: string; // Yon fraz oswa deviz pèsonèl
-  status: 'pending' | 'active' | 'rejected' | 'suspended';
+  status: 'pending' | 'active' | 'rejected' | 'suspended' | 'retired';
   registrationProofUrl?: string;
   registrationFeeUsd?: number; // Montan frè atis la te peye nan moman enskripsyon an
   registrationFeeHtg?: number; // Ekivalan an Goud
@@ -80,9 +80,13 @@ export interface ArtistUser {
   totalListens: number;
   totalDonationsReceived: number;
   suspendedAt?: string; // ISO date string when suspension started
-  suspendedUntil?: string; // ISO date string when suspension ends
-  suspensionDays?: number; // Duration of suspension in days (e.g. 15, 30, 45, etc.)
+  suspendedUntil?: string; // ISO date string when suspension ends or 'indefinite'
+  suspensionDays?: number; // Duration of suspension in days (e.g. 15, 30, 45, etc.) or -1 for indefinite
   suspensionReason?: string; // Specific reason for suspension entered by Admin
+  removedAt?: string; // Dat atis la te retire sou sistèm nan
+  removedBy?: string; // Admin ki te retire atis la
+  removalReason?: string; // Rezon ofisyèl retrè a
+  isPermanentlyRemoved?: boolean; // True si retrè a se san limit jiskaske admin re-entegrel
   youtubeUrl?: string;
   instagramUrl?: string;
   instagramHandle?: string;

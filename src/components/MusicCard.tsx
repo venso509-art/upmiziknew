@@ -5,6 +5,7 @@ import {
   HeartHandshake,
   Heart,
   Eye,
+  Headphones,
   MessageSquare,
   Share2,
   Volume2,
@@ -188,9 +189,10 @@ export const MusicCard: React.FC<MusicCardProps> = ({
 
         {/* Listen Count Top Right */}
         <div className="absolute top-3 right-3 z-10">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-black/80 text-slate-200 border border-white/[0.1] backdrop-blur-md shadow-sm">
-            <Eye className="w-3 h-3 text-blue-400" />
-            <span>{music.listens.toLocaleString()}</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-black/85 text-yellow-300 border border-yellow-400/25 backdrop-blur-md shadow-sm" title={`${music.listens.toLocaleString()} ekout`}>
+            <Headphones className="w-3 h-3 text-yellow-400" />
+            <span className="font-mono">{music.listens.toLocaleString()}</span>
+            <span className="text-[10px] text-yellow-300/80 font-normal">ekout</span>
           </div>
         </div>
 
@@ -212,7 +214,7 @@ export const MusicCard: React.FC<MusicCardProps> = ({
           )}
         </button>
 
-        {/* 5-Second Listen Counter Indicator Overlay (Active during playback) */}
+        {/* 3-Second Listen Counter Indicator Overlay (Active during playback) */}
         {isCurrentTrack && (
           <div className="absolute bottom-2.5 left-3 right-3 z-20">
             <div className="flex items-center justify-between text-[10px] text-slate-300 mb-1 font-mono">
@@ -226,7 +228,7 @@ export const MusicCard: React.FC<MusicCardProps> = ({
                 </span>
               ) : (
                 <span className="text-yellow-300 bg-yellow-950/90 px-1.5 py-0.5 rounded border border-yellow-500/30">
-                  {Math.max(0, 5 - Math.floor(playbackSeconds))}s pou valide
+                  {Math.max(0, 3 - Math.floor(playbackSeconds))}s pou valide
                 </span>
               )}
             </div>

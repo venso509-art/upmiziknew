@@ -348,6 +348,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [top3Id, setTop3Id] = useState(top3Override.topIds[2] || (musicList[2]?.id || ''));
 
   // Form State for Add / Edit Music
+  const [showAddMusicModal, setShowAddMusicModal] = useState<boolean>(false);
   const [musicTitle, setMusicTitle] = useState('');
   const [musicReleaseFormat, setMusicReleaseFormat] = useState<ReleaseFormat>('single');
   const [musicAlbumName, setMusicAlbumName] = useState('');
@@ -362,6 +363,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [musicStatus, setMusicStatus] = useState<'active' | 'pending' | 'rejected'>('active');
   const [musicCoverUrl, setMusicCoverUrl] = useState('');
   const [musicAudioUrl, setMusicAudioUrl] = useState('');
+  const [isUploadingMusicAudio, setIsUploadingMusicAudio] = useState(false);
   const [musicDuration, setMusicDuration] = useState<number>(180);
   const [musicYt, setMusicYt] = useState('');
   const [musicTiktok, setMusicTiktok] = useState('');
@@ -644,6 +646,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       onLogoutAdmin();
     }
   }, [clearAllLiveNotifications, onLogoutAdmin]);
+
+  // Lock body scroll whenever ANY modal or pop-up is active so page stays firmly targeted in place
+  useEffect(() => {
+    const isAnyModalActive = Boolean(
+      showAddMusicModal ||
+      showAddManualArtistModal ||
+      suspendingArtistTarget ||
+      deletingArtistTarget ||
+      payingArtistTarget ||
+      selectedArtistDossier ||
+      selectedArtistForSongBreakdown ||
+      proofModalInfo ||
+      proofModalUrl ||
+      showThresholdConfigModal ||
+      showSecurityAuthModal ||
+      showBulkRejectModal ||
+      showBulkSuspendModal ||
+      editingSong
+    );
+
+    if (isAnyModalActive) {
+      const original = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = original;
+      };
+    }
+  }, [
+    showAddMusicModal,
+    showAddManualArtistModal,
+    suspendingArtistTarget,
+    deletingArtistTarget,
+    payingArtistTarget,
+    selectedArtistDossier,
+    selectedArtistForSongBreakdown,
+    proofModalInfo,
+    proofModalUrl,
+    showThresholdConfigModal,
+    showSecurityAuthModal,
+    showBulkRejectModal,
+    showBulkSuspendModal,
+    editingSong
+  ]);
 
   const toggleLiveAudio = () => {
     setIsLiveAudioEnabled(prev => {
@@ -1103,6 +1148,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       baseList = artists || [];
     }
 
+    // Include removed/archived artists so Admin can view and re-integrate them at any time
+    try {
+      const removedArtists = StorageService.getRemovedArtists();
+      for (const rem of removedArtists) {
+        if (!baseList.some(a => a.id === rem.id)) {
+          baseList.push({
+            ...rem,
+            status: 'suspended'
+          });
+        }
+      }
+    } catch {}
+
     // Merge with incoming artists prop from App.tsx
     const propMap = new Map<string, ArtistUser>((artists || []).map(a => [a.id, a]));
 
@@ -1499,6 +1557,58 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   };
 
+  const handleUploadCover = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      try {
+        const compressed = await compressAndReadFile(file, 600, 600, 0.75);
+        if (compressed) {
+          setMusicCoverUrl(compressed);
+        }
+        const upRes = await UpMizikAPI.uploadFile(file, 'covers');
+        if (upRes && upRes.success && upRes.url) {
+          setMusicCoverUrl(upRes.url);
+        }
+      } catch (err) {
+        console.warn('Cover upload error:', err);
+      }
+    }
+  };
+
+  const handleUploadAudio = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const isMp3 = file.type === 'audio/mpeg' || file.type === 'audio/mp3' || file.name.toLowerCase().endsWith('.mp3');
+      const isWav = file.type === 'audio/wav' || file.type === 'audio/x-wav' || file.name.toLowerCase().endsWith('.wav');
+      if (!isMp3 && !isWav) {
+        alert('Tanpri chwazi yon fichye odyo MP3 oswa WAV sèlman.');
+        return;
+      }
+      setIsUploadingMusicAudio(true);
+      const audioKey = `audio_admin_${Date.now()}`;
+      await IdbStorage.saveMedia(audioKey, file);
+      setMusicAudioUrl(`idb:${audioKey}`);
+      try {
+        const dur = await getAudioDuration(file);
+        if (dur && dur > 0) {
+          setMusicDuration(dur);
+        }
+      } catch (err) {
+        console.warn('Audio duration detection error:', err);
+      }
+      try {
+        const upRes = await UpMizikAPI.uploadFile(file, 'music');
+        if (upRes && upRes.success && upRes.url) {
+          setMusicAudioUrl(upRes.url);
+        }
+      } catch (err) {
+        console.warn('Audio upload to server error:', err);
+      } finally {
+        setIsUploadingMusicAudio(false);
+      }
+    }
+  };
+
   const handleOpenEditMusic = (song: MusicItem) => {
     setEditingSong(song);
     setMusicTitle(song.title || '');
@@ -1519,6 +1629,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setMusicYt(song.youtubeUrl || '');
     setMusicTiktok(song.tiktokUrl || '');
     setMusicIg(song.instagramUrl || '');
+    setShowAddMusicModal(true);
     setActiveTab('add_music');
   };
 
@@ -1656,7 +1767,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       tiktokUrl: musicTiktok.trim() || undefined,
       instagramUrl: musicIg.trim() || undefined,
       createdAt: editingSong ? editingSong.createdAt : new Date().toISOString().split('T')[0],
-      commentsCount: editingSong ? editingSong.commentsCount : 0
+      commentsCount: editingSong ? editingSong.commentsCount : 0,
+      sharesCount: editingSong ? (editingSong.sharesCount || 0) : 0
     };
 
     onSaveMusicItem(songToSave);
@@ -1675,6 +1787,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setMusicCoverUrl('');
     setMusicAudioUrl('');
     setMusicDuration(180);
+    setShowAddMusicModal(false);
     setActiveTab('reports');
   };
 
@@ -2722,6 +2835,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             setMusicPosition(StorageService.getNextAvailablePosition());
             setMusicCoverUrl('');
             setMusicAudioUrl('');
+            setShowAddMusicModal(true);
             setActiveTab('add_music');
           }}
           className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-2 transition-all ${
@@ -2919,6 +3033,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     setMusicStatus('active');
                     setMusicCoverUrl('');
                     setMusicAudioUrl('');
+                    setShowAddMusicModal(true);
                     setActiveTab('add_music');
                   }}
                   className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white flex items-center gap-1.5 shadow-lg shadow-blue-600/30 transition-all active:scale-95"
@@ -6005,7 +6120,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 shadow-lg shadow-emerald-950/40 active:scale-95 transition-all"
                             >
                               <CheckCircle className="w-3.5 h-3.5" />
-                              <span>Leve Sispansyon (Re-aktive)</span>
+                              <span>Re-entegre Atis sa a</span>
                             </button>
                           ) : !isPending && !isRejected ? (
                             /* If Active -> Suspend Button */
@@ -6013,14 +6128,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               type="button"
                               onClick={() => {
                                 setSuspendingArtistTarget(art);
-                                setSuspensionDaysOption(15);
+                                setSuspensionDaysOption(30);
                                 setCustomSuspensionDays('');
                                 setSuspensionReasonInput('Vyolasyon règ ak kondisyon itilizasyon platfòm UpMizik la');
                               }}
                               className="px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/30 flex items-center gap-1.5 transition-all"
                             >
                               <Ban className="w-3.5 h-3.5 text-amber-400" />
-                              <span>Mete an Sispansyon</span>
+                              <span>Retire sou Sit la (Sispann)</span>
                             </button>
                           ) : null}
 
@@ -6032,10 +6147,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               setDeleteArtistSongsOption(true);
                             }}
                             className="px-3 py-2 rounded-xl text-xs font-bold bg-red-500/10 text-red-400 hover:bg-red-600 hover:text-white border border-red-500/20 flex items-center gap-1.5 transition-all"
-                            title="Siprime atis sa a sou sit la"
+                            title="Siprime atis sa a nèt nan baz done a"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
-                            <span>Siprime Atis</span>
+                            <span>Siprime Nèt</span>
                           </button>
                         </div>
                       </div>
@@ -7203,6 +7318,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         alert('Tanpri chwazi yon fichye odyo MP3 oswa WAV sèlman.');
                         return;
                       }
+                      setIsUploadingMusicAudio(true);
                       const audioKey = `audio_admin_${Date.now()}`;
                       await IdbStorage.saveMedia(audioKey, file);
                       setMusicAudioUrl(`idb:${audioKey}`);
@@ -7221,13 +7337,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         }
                       } catch (err) {
                         console.warn('Audio upload to server error:', err);
+                      } finally {
+                        setIsUploadingMusicAudio(false);
                       }
                     }
                   }}
                   className="w-full text-xs text-slate-400 file:py-1.5 file:px-3 file:rounded-xl file:bg-white/[0.08] file:text-white file:border-0 hover:file:bg-white/[0.12] cursor-pointer"
                 />
-                {musicAudioUrl && (
-                  <p className="text-[10px] text-emerald-400 mt-1">✓ Fichye odyo pare pou lekti.</p>
+                {isUploadingMusicAudio && (
+                  <p className="text-[10px] text-yellow-400 mt-1 flex items-center gap-1.5 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Fichye odyo a ap telechaje sou sèvè a... Tanpri tann.</span>
+                  </p>
+                )}
+                {!isUploadingMusicAudio && musicAudioUrl && (
+                  <p className="text-[10px] text-emerald-400 mt-1">✓ Fichye odyo pare pou lekti sou tout aparèy.</p>
                 )}
               </div>
             </div>
@@ -7259,10 +7383,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <button
               type="submit"
-              className="w-full py-3.5 rounded-xl font-bold text-xs bg-yellow-400 hover:bg-yellow-300 text-slate-950 flex items-center justify-center gap-2 shadow-xl shadow-yellow-500/20 active:scale-98"
+              disabled={isUploadingMusicAudio}
+              className={`w-full py-3.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-xl transition-all ${
+                isUploadingMusicAudio
+                  ? 'bg-yellow-400/50 text-slate-900 cursor-not-allowed'
+                  : 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 shadow-yellow-500/20 active:scale-98'
+              }`}
             >
-              <Check className="w-4 h-4" />
-              <span>{editingSong ? 'Mete Moso Mizik la Ajou' : 'Anrejistre Moso Mizik la'}</span>
+              {isUploadingMusicAudio ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Fichye odyo a ap telechaje sou sèvè a...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>{editingSong ? 'Mete Moso Mizik la Ajou' : 'Anrejistre Moso Mizik la'}</span>
+                </>
+              )}
             </button>
           </form>
         </div>
@@ -8388,189 +8526,233 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         />
       )}
 
-      {/* ARTIST SUSPENSION MODAL */}
+      {/* ARTIST SUSPENSION / REMOVAL MODAL */}
       {suspendingArtistTarget && (() => {
-        const effectiveDays = customSuspensionDays.trim() !== ''
+        const isIndefiniteSelected = suspensionDaysOption === -1 && customSuspensionDays.trim() === '';
+        const effectiveDays = isIndefiniteSelected
+          ? -1
+          : customSuspensionDays.trim() !== ''
           ? Math.max(1, parseInt(customSuspensionDays) || 15)
           : suspensionDaysOption;
         
-        const previewEndDate = new Date(Date.now() + effectiveDays * 24 * 60 * 60 * 1000);
+        const previewEndDate = effectiveDays === -1
+          ? null
+          : new Date(Date.now() + effectiveDays * 24 * 60 * 60 * 1000);
         let formattedPreviewEndDate = '';
-        try {
-          formattedPreviewEndDate = previewEndDate.toLocaleDateString('ht-HT', {
-            dateStyle: 'full'
-          });
-        } catch {
-          formattedPreviewEndDate = previewEndDate.toDateString();
+        if (previewEndDate) {
+          try {
+            formattedPreviewEndDate = previewEndDate.toLocaleDateString('ht-HT', {
+              dateStyle: 'full'
+            });
+          } catch {
+            formattedPreviewEndDate = previewEndDate.toDateString();
+          }
         }
 
         return (
           <div
-            className="fixed inset-0 z-50 overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-xl animate-fadeIn p-2 sm:p-4"
+            className="fixed inset-0 z-[150] overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-xl animate-fadeIn p-3 sm:p-6 flex justify-center items-start sm:items-center"
             onClick={(e) => {
               if (e.target === e.currentTarget) setSuspendingArtistTarget(null);
             }}
           >
-            <div className="min-h-full flex items-center justify-center py-4">
-              <div
-                className="relative max-w-lg w-full bg-[#0a0f1d]/95 border border-amber-500/40 rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5 backdrop-blur-2xl my-auto max-h-[92dvh] overflow-y-auto"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* Header */}
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/10">
-                    <Ban className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-black text-white">Mete Atis la an Sispansyon Aktivite</h3>
-                    <p className="text-xs text-slate-300">
-                      Atis: <strong className="text-yellow-400">{suspendingArtistTarget.stageName}</strong> ({suspendingArtistTarget.name})
-                    </p>
-                  </div>
+            <div className="relative max-w-lg w-full bg-[#0a0f1d] border border-amber-500/40 rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5 backdrop-blur-2xl my-auto max-h-[92dvh] overflow-y-auto animate-scaleUp" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/10">
+                  <Ban className="w-6 h-6" />
                 </div>
-
-                {/* Duration Picker */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-200">
-                    Chwazi kantite jou sispansyon an:
-                  </label>
-                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                    {[15, 30, 45, 60, 90].map((d) => (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => {
-                          setSuspensionDaysOption(d);
-                          setCustomSuspensionDays('');
-                        }}
-                        className={`py-2.5 px-2 rounded-xl text-xs font-black transition-all ${
-                          suspensionDaysOption === d && customSuspensionDays === ''
-                            ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30 scale-105'
-                            : 'bg-white/[0.06] text-slate-300 hover:bg-white/[0.12] border border-white/[0.08]'
-                        }`}
-                      >
-                        {d} Jou
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Custom Days Input */}
-                  <div className="pt-1 flex items-center gap-2">
-                    <span className="text-xs text-slate-400 font-medium">Oubyen pèsonalize:</span>
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        min="1"
-                        max="365"
-                        placeholder="Ex: 20"
-                        value={customSuspensionDays ?? ''}
-                        onChange={(e) => setCustomSuspensionDays(e.target.value)}
-                        className="w-20 bg-[#05070a] border border-white/[0.12] focus:border-amber-400 rounded-xl px-3 py-1 text-xs text-amber-300 font-mono font-bold outline-none"
-                      />
-                      <span className="text-xs text-slate-400">jou</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Live End Date Preview */}
-                <div className="bg-amber-950/40 border border-amber-500/30 rounded-2xl p-3.5 text-xs text-amber-200 space-y-1">
-                  <div className="flex items-center gap-2 font-bold text-amber-300">
-                    <Calendar className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Dire Sispansyon: {effectiveDays} Jou</span>
-                  </div>
-                  <p className="text-[11px] text-amber-200/90 pl-6">
-                    Sispansyon an ap fini otomatikman nan dat: <strong className="text-white">{formattedPreviewEndDate}</strong>.
+                <div>
+                  <h3 className="text-lg font-black text-white">Retire / Sispann Atis la sou Sistèm nan</h3>
+                  <p className="text-xs text-slate-300">
+                    Atis: <strong className="text-yellow-400">{suspendingArtistTarget.stageName}</strong> ({suspendingArtistTarget.name})
                   </p>
                 </div>
+              </div>
 
-                {/* Reason Input */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-200">
-                    Rezon ofisyèl pou sispansyon an (ap voye bay atis la):
-                  </label>
-
-                  {/* Quick Reason Suggestions */}
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setSuspensionReasonInput('Vyolasyon règ ak kondisyon itilizasyon platfòm UpMizik la')}
-                      className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 border border-white/[0.08]"
-                    >
-                      Vyolasyon règ
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSuspensionReasonInput('Plent sou dwadotè oswa kontni mizikal san otorizasyon')}
-                      className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 border border-white/[0.08]"
-                    >
-                      Dwadotè
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSuspensionReasonInput('Enfòmasyon ki pa kòrèk sou pwofil la oswa konpòtman ki pa konfòm')}
-                      className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 border border-white/[0.08]"
-                    >
-                      Enfòmasyon enkòrèk
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSuspensionReasonInput('Aktivite sispèk oswa fwod sou tranzaksyon donasyon')}
-                      className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 border border-white/[0.08]"
-                    >
-                      Aktivite sispèk
-                    </button>
-                  </div>
-
-                  <textarea
-                    rows={3}
-                    value={suspensionReasonInput ?? ''}
-                    onChange={(e) => setSuspensionReasonInput(e.target.value)}
-                    className="w-full bg-[#05070a] border border-white/[0.12] focus:border-amber-400 rounded-xl p-3 text-xs text-white outline-none resize-none leading-relaxed"
-                    placeholder="Tape rezon sispansyon an..."
-                  />
-                </div>
-
-                {/* Important Notice */}
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  ⚠️ <em>Nòt:</em> Yon imèl notifikasyon ap voye otomatikman sou kont atis la, epi espas atis li a ap montre yon banyè avètisman ki endike kantite jou ki rete nan sispansyon an. Tout aksyon ajoute mizik ak modifikasyon ap rete bloke pandan peryòd la.
-                </p>
-
-                {/* Action Buttons */}
-                <div className="flex items-center gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setSuspendingArtistTarget(null)}
-                    className="flex-1 py-3 rounded-xl text-xs font-bold bg-white/[0.06] text-slate-300 hover:bg-white/[0.1] border border-white/[0.08]"
-                  >
-                    Anile
-                  </button>
+              {/* Duration Picker */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-200">
+                  Chwazi peryòd retrè a:
+                </label>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                   <button
                     type="button"
                     onClick={() => {
-                      if (suspendingArtistTarget) {
-                        if (onSuspendArtist) {
-                          onSuspendArtist(
-                            suspendingArtistTarget.id,
-                            effectiveDays,
-                            suspensionReasonInput.trim() || undefined
-                          );
-                        } else {
-                          StorageService.suspendArtist(
-                            suspendingArtistTarget.id,
-                            effectiveDays,
-                            suspensionReasonInput.trim() || undefined,
-                            currentAdmin?.name || 'Mr Clauvens'
-                          );
-                        }
-                        setSuspendingArtistTarget(null);
-                      }
+                      setSuspensionDaysOption(-1);
+                      setCustomSuspensionDays('');
                     }}
-                    className="flex-1 py-3 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg shadow-amber-950/40 flex items-center justify-center gap-2"
+                    className={`py-2 px-1 rounded-xl text-xs font-black transition-all ${
+                      suspensionDaysOption === -1 && customSuspensionDays === ''
+                        ? 'bg-red-600 text-white shadow-md shadow-red-600/30 scale-105'
+                        : 'bg-white/[0.06] text-slate-300 hover:bg-white/[0.12] border border-white/[0.08]'
+                    }`}
                   >
-                    <Ban className="w-4 h-4" />
-                    <span>Konfime Sispansyon ({effectiveDays} Jou)</span>
+                    ⛔ Endefini
+                  </button>
+                  {[15, 30, 45, 60, 90].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => {
+                        setSuspensionDaysOption(d);
+                        setCustomSuspensionDays('');
+                      }}
+                      className={`py-2.5 px-2 rounded-xl text-xs font-black transition-all ${
+                        suspensionDaysOption === d && customSuspensionDays === ''
+                          ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30 scale-105'
+                          : 'bg-white/[0.06] text-slate-300 hover:bg-white/[0.12] border border-white/[0.08]'
+                      }`}
+                    >
+                      {d} Jou
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom Days Input */}
+                <div className="pt-1 flex items-center gap-2">
+                  <span className="text-xs text-slate-400 font-medium">Oubyen pèsonalize kantite jou:</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="1"
+                      max="365"
+                      placeholder="Ex: 20"
+                      value={customSuspensionDays ?? ''}
+                      onChange={(e) => setCustomSuspensionDays(e.target.value)}
+                      className="w-20 bg-[#05070a] border border-white/[0.12] focus:border-amber-400 rounded-xl px-3 py-1 text-xs text-amber-300 font-mono font-bold outline-none"
+                    />
+                    <span className="text-xs text-slate-400">jou</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live End Date Preview */}
+              <div className="bg-amber-950/40 border border-amber-500/30 rounded-2xl p-3.5 text-xs text-amber-200 space-y-1">
+                <div className="flex items-center gap-2 font-bold text-amber-300">
+                  <Calendar className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    {effectiveDays === -1 ? 'Dire: Endefini (San limit tan)' : `Dire: ${effectiveDays} Jou`}
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-200/90 pl-6">
+                  {effectiveDays === -1
+                    ? 'Atis sa a ap retire sou tout sistèm nan jiskaske ou menm kòm Administratè deside re-entegre l.'
+                    : `Sispansyon an ap fini otomatikman nan dat: ${formattedPreviewEndDate}.`}
+                </p>
+              </div>
+
+              {/* Hide songs option */}
+              <div className="bg-[#05070a] border border-white/[0.08] rounded-2xl p-3 space-y-2">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={deleteArtistSongsOption}
+                    onChange={(e) => setDeleteArtistSongsOption(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded border-slate-700 text-amber-500 focus:ring-amber-500 cursor-pointer"
+                  />
+                  <span className="text-xs text-slate-200">
+                    Kache tout mizik atis sa a sou platfòm nan (yo pap parèt nan rechèch ni sou pwofil).
+                  </span>
+                </label>
+              </div>
+
+              {/* Reason Input */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-200">
+                  Rezon ofisyèl pou retrè / sispansyon an:
+                </label>
+
+                {/* Quick Reason Suggestions */}
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSuspensionReasonInput('Vyolasyon règ ak kondisyon itilizasyon platfòm UpMizik la')}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 border border-white/[0.08]"
+                  >
+                    Vyolasyon règ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSuspensionReasonInput('Plent sou dwadotè oswa kontni mizikal san otorizasyon')}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 border border-white/[0.08]"
+                  >
+                    Dwadotè
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSuspensionReasonInput('Fwòd sou vòt, ekout oswa tranzaksyon donasyon')}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 border border-white/[0.08]"
+                  >
+                    Fwòd
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSuspensionReasonInput('Konpòtman deplase oswa mank respè sou platfòm nan')}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 border border-white/[0.08]"
+                  >
+                    Konpòtman
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSuspensionReasonInput('Enfòmasyon fo sou pwofil la oswa idantite envante')}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 border border-white/[0.08]"
+                  >
+                    Fo enfòmasyon
                   </button>
                 </div>
+
+                <textarea
+                  rows={3}
+                  value={suspensionReasonInput ?? ''}
+                  onChange={(e) => setSuspensionReasonInput(e.target.value)}
+                  className="w-full bg-[#05070a] border border-white/[0.12] focus:border-amber-400 rounded-xl p-3 text-xs text-white outline-none resize-none leading-relaxed"
+                  placeholder="Tape rezon sispansyon an..."
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSuspendingArtistTarget(null)}
+                  className="flex-1 py-3 rounded-xl text-xs font-bold bg-white/[0.06] text-slate-300 hover:bg-white/[0.1] border border-white/[0.08]"
+                >
+                  Anile
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (suspendingArtistTarget) {
+                      if (onSuspendArtist) {
+                        onSuspendArtist(
+                          suspendingArtistTarget.id,
+                          effectiveDays,
+                          suspensionReasonInput.trim() || undefined
+                        );
+                      } else {
+                        StorageService.suspendArtist(
+                          suspendingArtistTarget.id,
+                          effectiveDays,
+                          suspensionReasonInput.trim() || undefined,
+                          currentAdmin?.name || 'Mr Clauvens',
+                          deleteArtistSongsOption
+                        );
+                      }
+                      setSuspendingArtistTarget(null);
+                    }
+                  }}
+                  className={`flex-1 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg transition-all ${
+                    effectiveDays === -1
+                      ? 'bg-red-600 hover:bg-red-500 text-white shadow-red-950/50'
+                      : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-950/40'
+                  }`}
+                >
+                  <Ban className="w-4 h-4" />
+                  <span>
+                    {effectiveDays === -1 ? 'Konfime Retrè Endefini' : `Konfime Sispansyon (${effectiveDays} Jou)`}
+                  </span>
+                </button>
               </div>
             </div>
           </div>
@@ -8580,72 +8762,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* ARTIST DELETION CONFIRMATION MODAL */}
       {deletingArtistTarget && (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-xl animate-fadeIn p-2 sm:p-4"
+          className="fixed inset-0 z-[150] overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-xl animate-fadeIn p-3 sm:p-6 flex justify-center items-start sm:items-center"
           onClick={(e) => {
             if (e.target === e.currentTarget) setDeletingArtistTarget(null);
           }}
         >
-          <div className="min-h-full flex items-center justify-center py-4">
-            <div
-              className="relative max-w-md w-full bg-[#0a0f1d]/95 border border-red-500/40 rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5 backdrop-blur-2xl my-auto max-h-[92dvh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="w-12 h-12 rounded-2xl bg-red-600/20 text-red-400 border border-red-500/30 flex items-center justify-center mx-auto shadow-lg shadow-red-500/10">
-                <Trash2 className="w-6 h-6" />
-              </div>
+          <div className="relative max-w-md w-full bg-[#0a0f1d] border border-red-500/40 rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5 backdrop-blur-2xl my-auto max-h-[92dvh] overflow-y-auto animate-scaleUp" onClick={(e) => e.stopPropagation()}>
+            <div className="w-12 h-12 rounded-2xl bg-red-600/20 text-red-400 border border-red-500/30 flex items-center justify-center mx-auto shadow-lg shadow-red-500/10">
+              <Trash2 className="w-6 h-6" />
+            </div>
 
-              <div className="text-center">
-                <h3 className="text-lg font-black text-white">Siprime Kont Atis la sou Sit la</h3>
-                <p className="text-xs text-slate-300 mt-1">
-                  Èske w sèten ou vle efase kont atis <strong className="text-yellow-400">{deletingArtistTarget.stageName}</strong> ({deletingArtistTarget.name}) nèt sou UpMizik?
-                </p>
-              </div>
-
-              {/* Option to delete music or keep */}
-              <div className="bg-[#05070a] border border-white/[0.08] rounded-2xl p-3.5 space-y-2">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={deleteArtistSongsOption}
-                    onChange={(e) => setDeleteArtistSongsOption(e.target.checked)}
-                    className="mt-0.5 w-4 h-4 rounded border-slate-700 text-red-500 focus:ring-red-500 cursor-pointer"
-                  />
-                  <span className="text-xs text-slate-200">
-                    Siprime tou tout moso mizik atis sa a te pibliye sou platfòm nan.
-                  </span>
-                </label>
-              </div>
-
-              <p className="text-[11px] text-red-400 bg-red-950/40 border border-red-500/30 rounded-xl p-3">
-                ⚠️ <strong>Atansyon:</strong> Aksyon sa a se yon sipresyon definitif ki retire kont lan ak tout enfòmasyon li yo sou sistèm UpMizik la.
+            <div className="text-center">
+              <h3 className="text-lg font-black text-white">Retire / Efase Kont Atis la</h3>
+              <p className="text-xs text-slate-300 mt-1">
+                Èske w vle retire kont atis <strong className="text-yellow-400">{deletingArtistTarget.stageName}</strong> ({deletingArtistTarget.name}) sou platfòm UpMizik?
               </p>
+            </div>
 
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setDeletingArtistTarget(null)}
-                  className="flex-1 py-3 rounded-xl text-xs font-bold bg-white/[0.06] text-slate-300 hover:bg-white/[0.1] border border-white/[0.08]"
-                >
-                  Anile
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (deletingArtistTarget) {
-                      if (onDeleteArtist) {
-                        onDeleteArtist(deletingArtistTarget.id, deleteArtistSongsOption);
-                      } else {
-                        StorageService.deleteArtist(deletingArtistTarget.id, deleteArtistSongsOption);
-                      }
-                      setDeletingArtistTarget(null);
+            {/* Option to delete music or keep */}
+            <div className="bg-[#05070a] border border-white/[0.08] rounded-2xl p-3.5 space-y-2">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deleteArtistSongsOption}
+                  onChange={(e) => setDeleteArtistSongsOption(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-slate-700 text-red-500 focus:ring-red-500 cursor-pointer"
+                />
+                <span className="text-xs text-slate-200">
+                  Retire tou tout moso mizik atis sa a te pibliye sou sistèm nan.
+                </span>
+              </label>
+            </div>
+
+            <p className="text-[11px] text-amber-300 bg-amber-950/40 border border-amber-500/30 rounded-xl p-3">
+              ℹ️ <strong>Remak:</strong> Atis sa a ap konsève nan Achiv Atis Retire yo pou w ka toujou re-entegre l sou sistèm nan nenpòt lè selon regleman yo.
+            </p>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingArtistTarget(null)}
+                className="flex-1 py-3 rounded-xl text-xs font-bold bg-white/[0.06] text-slate-300 hover:bg-white/[0.1] border border-white/[0.08]"
+              >
+                Anile
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (deletingArtistTarget) {
+                    if (onDeleteArtist) {
+                      onDeleteArtist(deletingArtistTarget.id, deleteArtistSongsOption);
+                    } else {
+                      StorageService.deleteArtist(deletingArtistTarget.id, deleteArtistSongsOption);
                     }
-                  }}
-                  className="flex-1 py-3 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-950/50 flex items-center justify-center gap-1.5"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>Konfime Sipresyon</span>
-                </button>
-              </div>
+                    setDeletingArtistTarget(null);
+                  }
+                }}
+                className="flex-1 py-3 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-950/50 flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Konfime Retrè</span>
+              </button>
             </div>
           </div>
         </div>
@@ -9750,10 +9927,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* ADD MANUAL ARTIST INTEGRATION DEMAND MODAL */}
       {showAddManualArtistModal && (
-        <div className="fixed inset-0 z-[120] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
-          <div className="bg-[#0a0f1d] border border-amber-500/40 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl my-8 animate-scaleUp">
+        <div
+          className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddManualArtistModal(false);
+          }}
+        >
+          <div
+            className="relative w-full max-w-2xl bg-[#0a0f1d] border border-amber-500/40 rounded-3xl shadow-2xl my-auto backdrop-blur-2xl max-h-[92dvh] flex flex-col overflow-hidden animate-scaleUp"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Header */}
-            <div className="p-6 bg-gradient-to-r from-amber-950/60 via-[#0a0f1d] to-[#05070a] border-b border-white/[0.08] flex items-center justify-between">
+            <div className="shrink-0 p-5 sm:p-6 bg-gradient-to-r from-amber-950/60 via-[#0a0f1d] to-[#05070a] border-b border-white/[0.08] flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
                   <PlusCircle className="w-5 h-5" />
@@ -9815,7 +10000,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 setShowAddManualArtistModal(false);
                 setArtistValidationFilter(manualArtistStatus);
               }}
-              className="p-6 space-y-4 max-h-[70vh] overflow-y-auto"
+              className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 modal-backdrop-scroll"
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -10048,6 +10233,377 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD / EDIT MUSIC POPUP MODAL (DIRÈKTEMAN SOU EKRAN ADMIN AN SAN SCROLL) */}
+      {showAddMusicModal && (
+        <div
+          className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowAddMusicModal(false);
+              setEditingSong(null);
+            }
+          }}
+        >
+          <div
+            className="relative w-full max-w-2xl bg-[#0a0f1d] border border-yellow-400/40 rounded-3xl shadow-2xl my-auto backdrop-blur-2xl max-h-[92dvh] flex flex-col overflow-hidden animate-scaleUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Pinned Header */}
+            <div className="shrink-0 p-5 sm:p-6 bg-gradient-to-r from-yellow-500/15 via-[#0a0f1d] to-[#05070a] border-b border-white/[0.08] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-yellow-400/20 text-yellow-400 border border-yellow-400/30 flex items-center justify-center shrink-0">
+                  <Music className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    <PlusCircle className="w-5 h-5 text-red-500" />
+                    <span>{editingSong ? `Modifye Moso: ${editingSong.title}` : 'Ajoute yon Nouvo Moso Mizik'}</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Mete tout enfòmasyon, chwazi atis, pochet ak fichye odyo pou pibliye moso a.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddMusicModal(false);
+                  setEditingSong(null);
+                }}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Form Body */}
+            <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 modal-backdrop-scroll">
+              <form id="admin-add-music-modal-form" onSubmit={handleSaveMusicForm} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Tit Mizik la *</label>
+                    <input
+                      type="text"
+                      required
+                      value={musicTitle ?? ''}
+                      onChange={(e) => setMusicTitle(e.target.value)}
+                      placeholder="egz: Gouyad Papiyon"
+                      className="w-full bg-[#05070a] border border-white/[0.12] rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-yellow-400 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Chwazi Atis Prensipal *</label>
+                    <select
+                      value={musicArtistId || (effectiveArtists[0]?.id ?? artists[0]?.id ?? '')}
+                      onChange={(e) => setMusicArtistId(e.target.value)}
+                      className="w-full bg-[#05070a] border border-white/[0.12] rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-yellow-400 outline-none"
+                    >
+                      {(effectiveArtists.length > 0 ? effectiveArtists : artists).map((a) => (
+                        <option key={a.id} value={a.id}>{a.stageName} ({a.name})</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Release Format Selector */}
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-[#05070a]/90 border border-white/[0.1] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-yellow-400">
+                      Fòma / Tip Pwojè Mizikal la *
+                    </label>
+                    <span className="text-[10px] text-slate-400">
+                      Defini si mizik sa se yon Single oubyen si li fè pati yon Albòm, EP, Mixtape oswa Demo
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    {[
+                      { id: 'single', label: 'Single', icon: '🎵', desc: 'Mizik Endividyèl' },
+                      { id: 'album', label: 'Albòm', icon: '💿', desc: 'Album Konplè' },
+                      { id: 'ep', label: 'EP', icon: '💽', desc: 'Mini-Pwojè (3-6)' },
+                      { id: 'mixtape', label: 'Mixtape', icon: '📼', desc: 'Konpilasyon' },
+                      { id: 'demo', label: 'Demo', icon: '🎙️', desc: 'Vèsyon Tès' }
+                    ].map((fmt) => (
+                      <button
+                        key={fmt.id}
+                        type="button"
+                        onClick={() => setMusicReleaseFormat(fmt.id as ReleaseFormat)}
+                        className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                          musicReleaseFormat === fmt.id
+                            ? 'bg-yellow-400/20 border-yellow-400 text-white shadow-md shadow-yellow-400/10'
+                            : 'bg-[#0a0f1d] border-white/[0.08] text-slate-400 hover:text-white hover:border-white/[0.2]'
+                        }`}
+                      >
+                        <div className="text-base">{fmt.icon}</div>
+                        <div>
+                          <div className="text-xs font-bold text-white mt-1">{fmt.label}</div>
+                          <div className="text-[10px] text-slate-400 line-clamp-1">{fmt.desc}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {musicReleaseFormat !== 'single' && (
+                    <div className="pt-2 grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-white/[0.08] animate-in fade-in">
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-medium text-slate-300 mb-1">
+                          Non {musicReleaseFormat === 'album' ? 'Albòm' : musicReleaseFormat === 'ep' ? 'EP' : musicReleaseFormat === 'mixtape' ? 'Mixtape' : 'Demo'} an *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={musicAlbumName ?? ''}
+                          onChange={(e) => setMusicAlbumName(e.target.value)}
+                          placeholder="egz: Pwojè Lidè Vol. 1"
+                          className="w-full bg-[#0a0f1d] border border-white/[0.15] focus:border-yellow-400 rounded-xl px-3 py-2 text-xs text-white outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1">
+                          Nimewo Moso (Track #)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="99"
+                          value={musicTrackNumber ?? ''}
+                          onChange={(e) => setMusicTrackNumber(e.target.value ? parseInt(e.target.value) : '')}
+                          placeholder="egz: 1"
+                          className="w-full bg-[#0a0f1d] border border-white/[0.15] focus:border-yellow-400 rounded-xl px-3 py-2 text-xs text-white outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Featuring (opsyonèl)</label>
+                    <input
+                      type="text"
+                      value={musicFeat ?? ''}
+                      onChange={(e) => setMusicFeat(e.target.value)}
+                      placeholder="egz: Rutshelle, Wendy"
+                      className="w-full bg-[#05070a] border border-white/[0.12] rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-yellow-400 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Kategori Mizik *</label>
+                    <select
+                      value={musicCategory}
+                      onChange={(e) => setMusicCategory(e.target.value as MusicCategory)}
+                      className="w-full bg-[#05070a] border border-white/[0.12] rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-yellow-400 outline-none"
+                    >
+                      {(['Kompa', 'Drill', 'Afro', 'Trap', 'Rap', 'Hip-hop', 'Gouyad', 'Rabòday'] as MusicCategory[]).map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Collab with registered UpMizik Artist */}
+                <div className="p-3.5 rounded-2xl bg-purple-950/20 border border-purple-500/20 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+                    <label className="block text-xs font-bold text-purple-300">
+                      Kolaborasyon Ofisyèl ak yon Lòt Atis UpMizik (Opsyonèl)
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    <select
+                      value={musicCollabArtistId ?? ''}
+                      onChange={(e) => setMusicCollabArtistId(e.target.value)}
+                      className="w-full bg-[#05070a] border border-purple-500/30 rounded-xl px-3.5 py-2 text-xs text-purple-200 focus:border-purple-400 outline-none"
+                    >
+                      <option value="">-- Pa gen Kolaborasyon Lye --</option>
+                      {(effectiveArtists.length > 0 ? effectiveArtists : artists)
+                        .filter((a) => a.id !== (musicArtistId || effectiveArtists[0]?.id || artists[0]?.id))
+                        .map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.stageName} ({a.city || 'Atis UpMizik'})
+                          </option>
+                        ))}
+                    </select>
+                    {musicCollabArtistId && (
+                      <input
+                        type="text"
+                        value={musicCollabRole ?? ''}
+                        onChange={(e) => setMusicCollabRole(e.target.value)}
+                        placeholder="Wòl (egz: Featuring, Duet, Beatmaker)"
+                        className="w-full bg-[#05070a] border border-purple-500/30 rounded-xl px-3.5 py-2 text-xs text-purple-200 focus:border-purple-400 outline-none"
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* CREDITS & SPLIT SHEETS */}
+                <SongCreditsEditor
+                  credits={musicCredits}
+                  mainArtistName={(effectiveArtists.length > 0 ? effectiveArtists : artists).find((a) => a.id === (musicArtistId || effectiveArtists[0]?.id || artists[0]?.id))?.stageName || 'Atis Prensipal'}
+                  registeredArtists={effectiveArtists.length > 0 ? effectiveArtists : artists}
+                  onAddCredit={handleAddMusicCredit}
+                  onRemoveCredit={handleRemoveMusicCredit}
+                  onUpdateCredit={handleUpdateMusicCredit}
+                />
+
+                {/* Cover URL / Upload */}
+                <div className="p-3.5 rounded-2xl bg-[#05070a]/80 border border-white/[0.08] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-slate-300">
+                      Foto Pochet (Cover Art) *
+                    </label>
+                    <span className="text-[10px] text-slate-500">JPG, PNG, WebP</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-xl overflow-hidden border border-white/[0.12] bg-[#05070a] shrink-0">
+                      <img
+                        src={musicCoverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80'}
+                        alt="Cover preview"
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.1] text-xs font-medium text-slate-200 cursor-pointer transition-colors">
+                        <Upload className="w-3.5 h-3.5 text-yellow-400" />
+                        <span>Chwazi Foto Pochet</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleUploadCover}
+                          className="hidden"
+                        />
+                      </label>
+                      <input
+                        type="url"
+                        value={musicCoverUrl ?? ''}
+                        onChange={(e) => setMusicCoverUrl(e.target.value)}
+                        placeholder="Oubyen kole lyen foto an dirèk"
+                        className="w-full bg-[#05070a] border border-white/[0.12] rounded-xl px-3 py-1.5 text-xs text-white focus:border-yellow-400 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* MP3 Audio Upload */}
+                <div className="p-3.5 rounded-2xl bg-[#05070a]/80 border border-white/[0.08] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-slate-300">
+                      Fichye Odyo (MP3, WAV, M4A) *
+                    </label>
+                    <span className="text-[10px] text-slate-500">Max 50MB</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors border ${
+                      isUploadingMusicAudio
+                        ? 'bg-yellow-400/20 text-yellow-300 border-yellow-400/40 cursor-not-allowed'
+                        : musicAudioUrl
+                        ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-600/30'
+                        : 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 border-yellow-400 shadow-lg shadow-yellow-500/20'
+                    }`}>
+                      {isUploadingMusicAudio ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-yellow-400" />
+                          <span>Ap Chaje Odyo Sou Sèvè a...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span>{musicAudioUrl ? 'Chanje Fichye Odyo a' : 'Telechaje Fichye Odyo'}</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="audio/*,.mp3,.wav,.m4a,.aac"
+                        disabled={isUploadingMusicAudio}
+                        onChange={handleUploadAudio}
+                        className="hidden"
+                      />
+                    </label>
+                    {musicAudioUrl && !isUploadingMusicAudio && (
+                      <span className="text-xs text-emerald-400 flex items-center gap-1 font-medium">
+                        <Check className="w-3.5 h-3.5" /> Odyo Pare
+                      </span>
+                    )}
+                  </div>
+                  {isUploadingMusicAudio && (
+                    <div className="p-2.5 rounded-xl bg-yellow-950/40 border border-yellow-500/30 text-xs text-yellow-200 flex items-center gap-2 animate-pulse">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-yellow-400 shrink-0" />
+                      <span>Fichye odyo a ap voye sou sèvè a... tanpri pa fèmen fenèt sa a.</span>
+                    </div>
+                  )}
+                  <input
+                    type="url"
+                    value={musicAudioUrl ?? ''}
+                    onChange={(e) => setMusicAudioUrl(e.target.value)}
+                    placeholder="Oubyen kole lyen fichye odyo dirèk (URL MP3)"
+                    className="w-full bg-[#05070a] border border-white/[0.12] rounded-xl px-3 py-1.5 text-xs text-white focus:border-yellow-400 outline-none"
+                  />
+                </div>
+
+                {/* Social Links */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    type="url"
+                    value={musicYt ?? ''}
+                    onChange={(e) => setMusicYt(e.target.value)}
+                    placeholder="Lyen YouTube"
+                    className="bg-[#05070a] border border-white/[0.12] rounded-xl px-3 py-2 text-xs text-white focus:border-yellow-400 outline-none"
+                  />
+                  <input
+                    type="url"
+                    value={musicTiktok ?? ''}
+                    onChange={(e) => setMusicTiktok(e.target.value)}
+                    placeholder="Lyen TikTok"
+                    className="bg-[#05070a] border border-white/[0.12] rounded-xl px-3 py-2 text-xs text-white focus:border-yellow-400 outline-none"
+                  />
+                  <input
+                    type="url"
+                    value={musicIg ?? ''}
+                    onChange={(e) => setMusicIg(e.target.value)}
+                    placeholder="Lyen Instagram"
+                    className="bg-[#05070a] border border-white/[0.12] rounded-xl px-3 py-2 text-xs text-white focus:border-yellow-400 outline-none"
+                  />
+                </div>
+              </form>
+            </div>
+
+            {/* Pinned Footer */}
+            <div className="shrink-0 p-4 sm:p-5 bg-black/60 border-t border-white/[0.08] flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddMusicModal(false);
+                  setEditingSong(null);
+                }}
+                className="flex-1 py-3 rounded-xl text-xs font-bold bg-white/[0.06] text-slate-300 hover:bg-white/[0.1] border border-white/[0.08] transition-all"
+              >
+                Anile
+              </button>
+              <button
+                form="admin-add-music-modal-form"
+                type="submit"
+                disabled={isUploadingMusicAudio}
+                className="flex-1 py-3.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-slate-950 shadow-xl shadow-yellow-500/20 active:scale-98 disabled:opacity-50 transition-all"
+              >
+                {isUploadingMusicAudio ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Fichye odyo a ap telechaje...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>{editingSong ? 'Mete Moso Mizik la Ajou' : 'Anrejistre Moso Mizik la'}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

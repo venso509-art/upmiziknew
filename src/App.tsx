@@ -929,8 +929,8 @@ export default function App() {
       const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
       setPlaybackProgress(progressPercent);
 
-      // Listen count logic: Increment after 5 continuous seconds of listening (Unique per user/device)
-      if (currentTime >= 5 && !hasListened5s && currentTrack) {
+      // Listen count logic: Increment after 3 continuous seconds of listening (Unique per user/device)
+      if (currentTime >= 3 && !hasListened5s && currentTrack) {
         setHasListened5s(true);
         StorageService.addRecentListenedId(currentTrack.id);
         const wasIncremented = StorageService.incrementListenCount(currentTrack.id);
@@ -1017,9 +1017,16 @@ export default function App() {
     globalSoundEngine.setMuted(nextMuted);
   };
 
-  // Top 3 computation (Only active/published tracks)
+  // Top 3 computation (Only active/published tracks belonging to active artists)
   const top3Songs = useMemo(() => {
-    const activeList = musicList.filter(m => m.status === 'active' || !m.status);
+    const activeList = musicList.filter(m => {
+      if (m.status !== 'active' && m.status) return false;
+      const artist = artists.find(a => a.id === m.artistId);
+      if (artist && (artist.status === 'suspended' || artist.status === 'rejected' || (artist as any)?.status === 'retired')) {
+        return false;
+      }
+      return true;
+    });
     if (top3Override.enabled && top3Override.topIds.length > 0) {
       const selected = top3Override.topIds
         .map((id) => activeList.find((m) => m.id === id))
@@ -1028,18 +1035,37 @@ export default function App() {
     }
     // Fallback: Highest listens among active songs
     return [...activeList].sort((a, b) => b.listens - a.listens).slice(0, 3);
-  }, [musicList, top3Override]);
+  }, [musicList, top3Override, artists]);
 
-  // Active/Approved Artists only (Exclude pending registration or rejected/suspended artists from public view)
+  // Active/Approved Artists only (Exclude pending registration, rejected, suspended, or retired/removed artists from public view)
   const activeArtists = useMemo(() => {
-    return (artists || []).filter(a => a && (a.status === 'active' || !a.status) && a.status !== 'pending' && a.status !== 'rejected' && a.status !== 'suspended');
+    return (artists || []).filter(
+      (a) =>
+        a &&
+        (a.status === 'active' || !a.status) &&
+        a.status !== 'pending' &&
+        a.status !== 'rejected' &&
+        a.status !== 'suspended' &&
+        (a as any).status !== 'retired'
+    );
   }, [artists]);
 
-  // Filtered Music List for Feed (Only active/published tracks are public)
+  // Filtered Music List for Feed (Only active/published tracks from active artists are public)
   const filteredMusic = useMemo(() => {
     return musicList.filter((item) => {
       const isPublished = item.status === 'active' || !item.status;
       if (!isPublished) return false;
+
+      // Anpeche nenpòt mizik yon atis ki sispann, retire oswa rejte parèt sou sit la
+      const artist = artists.find((a) => a.id === item.artistId);
+      if (
+        artist &&
+        (artist.status === 'suspended' ||
+          artist.status === 'rejected' ||
+          (artist as any)?.status === 'retired')
+      ) {
+        return false;
+      }
 
       const matchSearch =
         searchQuery === '' ||
@@ -1058,7 +1084,7 @@ export default function App() {
 
       return matchSearch && matchCategory;
     });
-  }, [musicList, searchQuery, selectedCategory, cachedTrackIds]);
+  }, [musicList, searchQuery, selectedCategory, cachedTrackIds, artists]);
 
   // Category selection handler with smooth scroll to music grid
   const handleSelectCategory = (cat: MusicCategory | string) => {
@@ -1493,11 +1519,13 @@ export default function App() {
     );
   };
 
-  const handleSuspendArtist = (artistId: string, days: number, reason?: string) => {
+  const handleSuspendArtist = async (artistId: string, days: number, reason?: string) => {
     const adminName = currentAdmin?.name || 'Mr Clauvens';
-    const result = StorageService.suspendArtist(artistId, days, reason, adminName);
+    const cleanReason = reason?.trim() || 'Vyolasyon règ ak kondisyon itilizasyon platfòm UpMizik la';
+    const result = StorageService.suspendArtist(artistId, days, cleanReason, adminName);
     if (result.artist) {
-      HostingerService.saveSingleArtist(result.artist);
+      await HostingerService.saveSingleArtist(result.artist);
+      await UpMizikAPI.setArtistStatus(artistId, 'suspended', cleanReason);
     }
     if (result.generatedEmail) {
       HostingerService.saveInboxMessage(result.generatedEmail);
@@ -1506,55 +1534,56 @@ export default function App() {
     setArtists(updatedArtists);
 
     if (currentArtist && currentArtist.id === artistId) {
-      const refreshed = updatedArtists.find((a) => a.id === artistId);
-      if (refreshed) {
-        setCurrentArtist(refreshed);
-        StorageService.setLoggedInArtist(refreshed);
-      }
+      setCurrentArtist(null);
+      StorageService.setLoggedInArtist(null);
+      setCurrentView('public');
+    }
+
+    if (selectedArtistForProfile && selectedArtistForProfile.id === artistId) {
+      setSelectedArtistForProfile(null);
+    }
+
+    if (currentTrack && (currentTrack.artistId === artistId || currentTrack.collab?.artistId === artistId)) {
+      setIsPlaying(false);
     }
 
     if (result.artist) {
+      const durationText = days <= 0 ? 'nèt sou sit la (endefini)' : `sou sit la pou ${days} jou`;
       addToast(
         'info',
-        `⚠️ Atis "${result.artist.stageName}" mete an sispansyon pou ${days} jou. Imèl avètisman voye sou ${result.artist.email}.`,
+        `⚠️ Atis "${result.artist.stageName}" retire ${durationText}. Rezon: ${cleanReason}.`,
         'admin'
       );
     }
   };
 
-  const handleReactivateArtist = (artistId: string) => {
+  const handleReactivateArtist = async (artistId: string) => {
     const adminName = currentAdmin?.name || 'Mr Clauvens';
     const result = StorageService.reactivateArtist(artistId, adminName);
     if (result.artist) {
-      HostingerService.saveSingleArtist(result.artist);
+      await HostingerService.saveSingleArtist(result.artist);
+      await UpMizikAPI.setArtistStatus(artistId, 'active');
     }
     if (result.generatedEmail) {
       HostingerService.saveInboxMessage(result.generatedEmail);
     }
     const updatedArtists = StorageService.getArtists();
     setArtists(updatedArtists);
-
-    if (currentArtist && currentArtist.id === artistId) {
-      const refreshed = updatedArtists.find((a) => a.id === artistId);
-      if (refreshed) {
-        setCurrentArtist(refreshed);
-        StorageService.setLoggedInArtist(refreshed);
-      }
-    }
 
     if (result.artist) {
       addToast(
         'success',
-        `✅ Sispansyon "${result.artist.stageName}" leve avèk siksè! Kont lan re-aktif kounye a.`,
+        `✅ Atis "${result.artist.stageName}" re-entegre avèk siksè sou UpMizik! Kont lan aktif kounye a.`,
         'admin'
       );
     }
   };
 
-  const handleDeleteArtist = (artistId: string, deleteSongs?: boolean) => {
+  const handleDeleteArtist = async (artistId: string, deleteSongs?: boolean) => {
     const target = artists.find((a) => a.id === artistId);
     StorageService.deleteArtist(artistId, deleteSongs);
-    HostingerService.deleteArtist(artistId);
+    await HostingerService.deleteArtist(artistId, deleteSongs);
+    await UpMizikAPI.deleteArtist(artistId);
     setArtists(StorageService.getArtists());
     if (deleteSongs) {
       setMusicList(StorageService.getMusic());
@@ -1564,6 +1593,14 @@ export default function App() {
       setCurrentArtist(null);
       StorageService.setLoggedInArtist(null);
       setCurrentView('public');
+    }
+
+    if (selectedArtistForProfile && selectedArtistForProfile.id === artistId) {
+      setSelectedArtistForProfile(null);
+    }
+
+    if (currentTrack && (currentTrack.artistId === artistId || currentTrack.collab?.artistId === artistId)) {
+      setIsPlaying(false);
     }
 
     addToast('info', `Kont atis "${target?.stageName || ''}" siprime nèt sou platfòm nan.`, 'admin');

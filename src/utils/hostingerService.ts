@@ -327,10 +327,25 @@ class HostingerSyncService {
     }
   }
 
-  async deleteArtist(artistId: string) {
+  async deleteArtist(artistId: string, deleteSongs = true) {
     try {
-      const result = StorageService.deleteArtist(artistId, true);
+      const result = StorageService.deleteArtist(artistId, deleteSongs);
       this.emitChange('artists', StorageService.getArtists());
+      if (deleteSongs) {
+        this.emitChange('music', StorageService.getMusic());
+      }
+
+      // Efase nèt nan baz done MySQL Coolify a
+      await UpMizikAPI.deleteArtist(artistId).catch((apiErr) => {
+        console.warn('[HostingerService] Remote API deleteArtist error:', apiErr);
+      });
+
+      // Re-senkronize pou tout sesyon yo aliyen
+      setTimeout(() => {
+        this.fetchArtistsAndNotify(true).catch(() => {});
+        this.fetchMusicAndNotify(true).catch(() => {});
+      }, 300);
+
       return result;
     } catch (e) {
       console.warn('[HostingerService] deleteArtist warn:', e);

@@ -493,15 +493,30 @@ if ($method === 'DELETE') {
         jsonResponse(['success' => false, 'message' => 'Id atis la obligatwa.'], 400);
     }
 
-    $stmt = $pdo->prepare("DELETE FROM artistes WHERE id = ?");
-    $stmt->execute([$id]);
+    try {
+        // Efase tout dosye ki lye ak atis sa a anvan pou evite okenn vyolasyon kle etranjè
+        @$pdo->prepare("DELETE FROM credits_musique WHERE musique_id IN (SELECT id FROM musiques WHERE artiste_id = ?)")->execute([$id]);
+        @$pdo->prepare("DELETE FROM commentaires_musique WHERE musique_id IN (SELECT id FROM musiques WHERE artiste_id = ?)")->execute([$id]);
+        @$pdo->prepare("DELETE FROM musiques WHERE artiste_id = ?")->execute([$id]);
+        @$pdo->prepare("DELETE FROM dons WHERE artiste_id = ?")->execute([$id]);
+        @$pdo->prepare("DELETE FROM messages_inbox WHERE artiste_id = ?")->execute([$id]);
+        @$pdo->prepare("DELETE FROM publications_sociales WHERE artiste_id = ?")->execute([$id]);
 
-    jsonResponse([
-        'success' => true,
-        'message' => 'Atis la efase avèk siksè nan baz done a!',
-        'data' => ['artistId' => $id],
-        'errors' => []
-    ]);
+        $stmt = $pdo->prepare("DELETE FROM artistes WHERE id = ?");
+        $stmt->execute([$id]);
+
+        jsonResponse([
+            'success' => true,
+            'message' => 'Atis la ak tout done li yo efase nèt sou UpMizik!',
+            'data' => ['artistId' => $id],
+            'errors' => []
+        ]);
+    } catch (Exception $e) {
+        jsonResponse([
+            'success' => false,
+            'message' => 'Erè pandan sipresyon atis la: ' . $e->getMessage()
+        ], 500);
+    }
 }
 
 jsonResponse(['success' => false, 'message' => 'Metòd sa a pa sipòte.'], 405);

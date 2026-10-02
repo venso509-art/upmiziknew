@@ -369,6 +369,7 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
   const [category, setCategory] = useState<MusicCategory>('Kompa');
   const [coverPreview, setCoverPreview] = useState('');
   const [audioPreview, setAudioPreview] = useState('');
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false);
   const [duration, setDuration] = useState<number>(180);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [tiktokUrl, setTiktokUrl] = useState('');
@@ -397,6 +398,18 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
   const [editSongError, setEditSongError] = useState<string | null>(null);
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Lock body scroll whenever a modal is open so that the page doesn't scroll underneath
+  useEffect(() => {
+    const isModalActive = Boolean(showAddModal || editingSong || showBlockedDialog || deleteConfirmId);
+    if (isModalActive) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [showAddModal, editingSong, showBlockedDialog, deleteConfirmId]);
 
   // Available registered artists for collaboration linking (excluding current artist)
   const registeredArtists = StorageService.getArtists().filter(
@@ -446,6 +459,7 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
         return;
       }
       setAddSongError(null);
+      setIsUploadingAudio(true);
       const audioKey = `audio_artist_${currentArtist.id}_${Date.now()}`;
       await IdbStorage.saveMedia(audioKey, file);
       setAudioPreview(`idb:${audioKey}`);
@@ -464,6 +478,8 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
         }
       } catch (err) {
         console.warn('Audio upload to server error:', err);
+      } finally {
+        setIsUploadingAudio(false);
       }
     }
   };
@@ -664,6 +680,7 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
         return;
       }
       setEditSongError(null);
+      setIsUploadingAudio(true);
       const audioKey = `audio_artist_${currentArtist.id}_${Date.now()}`;
       await IdbStorage.saveMedia(audioKey, file);
       setEditAudioPreview(`idb:${audioKey}`);
@@ -682,6 +699,8 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
         }
       } catch (err) {
         console.warn('Audio edit upload error:', err);
+      } finally {
+        setIsUploadingAudio(false);
       }
     }
   };
@@ -2080,34 +2099,47 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
 
       {/* ADD NEW SONG MODAL */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fadeIn">
-          <div className="relative w-full max-w-xl bg-[#0a0f1d]/95 border border-white/[0.12] rounded-3xl p-6 sm:p-7 shadow-2xl my-8 backdrop-blur-2xl max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setShowAddModal(false)}
-              className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-white hover:bg-white/[0.08]"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-2xl bg-red-600/20 text-red-400 border border-red-500/30 flex items-center justify-center shadow-lg shadow-red-500/10">
-                <Music className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">Pibliye yon Nouvo Moso Mizik</h3>
-                <p className="text-xs text-slate-400">Pou atis: <strong className="text-yellow-400">{currentArtist.stageName}</strong></p>
-              </div>
-            </div>
-
-            {!isArtistActive && (
-              <div className="mb-4 p-4 bg-red-950/80 border-2 border-red-500/80 rounded-2xl flex items-center gap-3 text-xs text-red-200 backdrop-blur-md shadow-xl">
-                <Lock className="w-5 h-5 text-red-400 shrink-0" />
+        <div
+          className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddModal(false);
+          }}
+        >
+          <div
+            className="relative w-full max-w-xl bg-[#0a0f1d] border border-white/[0.15] rounded-3xl shadow-2xl my-auto backdrop-blur-2xl max-h-[92dvh] flex flex-col overflow-hidden animate-scaleUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Pinned Header */}
+            <div className="shrink-0 p-5 sm:p-6 bg-gradient-to-r from-red-600/15 via-[#0a0f1d] to-[#05070a] border-b border-white/[0.08] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-red-600/20 text-red-400 border border-red-500/30 flex items-center justify-center shadow-lg shadow-red-500/10 shrink-0">
+                  <Music className="w-5 h-5" />
+                </div>
                 <div>
-                  <p className="font-bold text-white">Ajoute Mizik Bloke:</p>
-                  <p className="mt-0.5">Ou pap ka pibliye moso sa toutotan Administratè UpMizik la (Mr clauvens) pa fin valide prèv transfè $4.99 ou an.</p>
+                  <h3 className="text-base sm:text-lg font-bold text-white">Pibliye yon Nouvo Moso Mizik</h3>
+                  <p className="text-xs text-slate-400">Pou atis: <strong className="text-yellow-400">{currentArtist.stageName}</strong></p>
                 </div>
               </div>
-            )}
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Form Body */}
+            <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 modal-backdrop-scroll">
+              {!isArtistActive && (
+                <div className="mb-4 p-4 bg-red-950/80 border-2 border-red-500/80 rounded-2xl flex items-center gap-3 text-xs text-red-200 backdrop-blur-md shadow-xl">
+                  <Lock className="w-5 h-5 text-red-400 shrink-0" />
+                  <div>
+                    <p className="font-bold text-white">Ajoute Mizik Bloke:</p>
+                    <p className="mt-0.5">Ou pap ka pibliye moso sa toutotan Administratè UpMizik la (Mr clauvens) pa fin valide prèv transfè $4.99 ou an.</p>
+                  </div>
+                </div>
+              )}
 
             <form onSubmit={handleAddSongSubmit} className="space-y-4">
               {/* Warning banner for phone number / 5+ consecutive digits */}
@@ -2425,8 +2457,14 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
                   onChange={handleAudioUpload}
                   className="w-full text-xs text-slate-400 file:py-1.5 file:px-3 file:rounded-xl file:bg-white/[0.08] file:text-white file:border-0 hover:file:bg-white/[0.12] cursor-pointer"
                 />
-                {audioPreview && (
-                  <p className="text-[10px] text-emerald-400 mt-1">✓ Fichye odyo pare pou piblikasyon.</p>
+                {isUploadingAudio && (
+                  <p className="text-[10px] text-yellow-400 mt-1 flex items-center gap-1.5 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Fichye odyo a ap telechaje sou sèvè a... Tanpri tann.</span>
+                  </p>
+                )}
+                {!isUploadingAudio && audioPreview && (
+                  <p className="text-[10px] text-emerald-400 mt-1">✓ Fichye odyo pare pou piblikasyon sou tout aparèy.</p>
                 )}
               </div>
 
@@ -2448,30 +2486,46 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
                 />
               </div>
 
+              </form>
+            </div>
+
+            {/* Pinned Footer */}
+            <div className="shrink-0 p-4 sm:p-5 bg-black/60 border-t border-white/[0.08] flex items-center gap-3">
               <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="flex-1 py-3 rounded-xl text-xs font-bold bg-white/[0.06] text-slate-300 hover:bg-white/[0.1] border border-white/[0.08] transition-all"
+              >
+                Anile
+              </button>
+              <button
+                form="artist-add-song-form"
                 type="submit"
-                disabled={isSubmitting}
-                className={`w-full py-3.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50 transition-all shadow-xl ${
+                disabled={isSubmitting || isUploadingAudio || !isArtistActive}
+                className={`flex-1 py-3.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50 transition-all shadow-xl ${
                   !isArtistActive
-                    ? 'bg-red-950/70 hover:bg-red-900/80 text-red-300 border border-red-500/40 shadow-red-950/40'
+                    ? 'bg-red-950/70 hover:bg-red-900/80 text-red-300 border border-red-500/40 shadow-red-950/40 cursor-not-allowed'
                     : 'bg-red-600 hover:bg-red-500 text-white shadow-red-950/50'
                 }`}
               >
-                {isSubmitting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                {isSubmitting || isUploadingAudio ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>{isUploadingAudio ? 'Odyo ap telechaje...' : 'Piblikasyon ap fèt...'}</span>
+                  </div>
                 ) : !isArtistActive ? (
                   <>
                     <Lock className="w-4 h-4 text-red-400" />
-                    <span>Bloke - Ap Tann Validasyon Admin</span>
+                    <span>Bloke - Ap Tann Validasyon</span>
                   </>
                 ) : (
                   <>
                     <PlusCircle className="w-4 h-4" />
-                    <span>Pibliye Moso Sa Sou UpMizik</span>
+                    <span>Pibliye Moso Sa</span>
                   </>
                 )}
               </button>
-            </form>
+            </div>
           </div>
         </div>
       )}
@@ -2479,30 +2533,37 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
       {/* EDIT SONG MODAL */}
       {editingSong && (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-md p-2 sm:p-4 animate-fadeIn"
+          className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fadeIn"
           onClick={(e) => {
             if (e.target === e.currentTarget) setEditingSong(null);
           }}
         >
-          <div className="min-h-full flex items-center justify-center py-4">
-            <div className="relative w-full max-w-xl bg-[#0a0f1d]/95 border border-white/[0.12] rounded-3xl p-5 sm:p-7 shadow-2xl my-auto backdrop-blur-2xl max-h-[92dvh] overflow-y-auto">
-            <button
-              onClick={() => setEditingSong(null)}
-              className="absolute top-4 right-4 sm:top-5 sm:right-5 p-2 rounded-full text-slate-400 hover:text-white hover:bg-white/[0.08] z-10"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-2xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shadow-lg shadow-blue-500/10">
-                <Pencil className="w-5 h-5" />
+          <div
+            className="relative w-full max-w-xl bg-[#0a0f1d] border border-white/[0.15] rounded-3xl shadow-2xl my-auto backdrop-blur-2xl max-h-[92dvh] flex flex-col overflow-hidden animate-scaleUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Pinned Header */}
+            <div className="shrink-0 p-5 sm:p-6 bg-gradient-to-r from-blue-600/15 via-[#0a0f1d] to-[#05070a] border-b border-white/[0.08] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shadow-lg shadow-blue-500/10 shrink-0">
+                  <Pencil className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white">Modifye Moso Mizik</h3>
+                  <p className="text-xs text-slate-400">Atis: <strong className="text-yellow-400">{currentArtist.stageName}</strong></p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">Modifye Moso Mizik</h3>
-                <p className="text-xs text-slate-400">Atis: <strong className="text-yellow-400">{currentArtist.stageName}</strong></p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setEditingSong(null)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
+            {/* Scrollable Form Body */}
+            <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 modal-backdrop-scroll">
             <form onSubmit={handleEditSongSubmit} className="space-y-4">
               {/* Warning banner for phone number / 5+ consecutive digits */}
               {(editSongError || hasRestrictedPhoneOrDigits(editTitle) || hasRestrictedPhoneOrDigits(editFeat) || hasRestrictedPhoneOrDigits(editAlbumName)) && (
@@ -2788,8 +2849,14 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
                   onChange={handleEditAudioUpload}
                   className="w-full text-xs text-slate-400 file:py-1.5 file:px-3 file:rounded-xl file:bg-white/[0.08] file:text-white file:border-0 hover:file:bg-white/[0.12] cursor-pointer"
                 />
-                {editAudioPreview && (
-                  <p className="text-[10px] text-emerald-400 mt-1">✓ Fichye odyo pare pou jwe.</p>
+                {isUploadingAudio && (
+                  <p className="text-[10px] text-yellow-400 mt-1 flex items-center gap-1.5 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Nouvo fichye odyo a ap telechaje sou sèvè a... Tanpri tann.</span>
+                  </p>
+                )}
+                {!isUploadingAudio && editAudioPreview && (
+                  <p className="text-[10px] text-emerald-400 mt-1">✓ Fichye odyo pare pou jwe sou tout aparèy.</p>
                 )}
               </div>
 
@@ -2821,11 +2888,20 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmittingEdit}
-                  className="flex-1 py-3 rounded-xl font-bold text-xs bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-900/50 flex items-center justify-center gap-2 active:scale-95 transition-all"
+                  disabled={isSubmittingEdit || isUploadingAudio}
+                  className="flex-1 py-3 rounded-xl font-bold text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white shadow-lg shadow-blue-900/50 flex items-center justify-center gap-2 active:scale-95 transition-all"
                 >
-                  {isSubmittingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  <span>Anrejistre Modifikasyon</span>
+                  {isSubmittingEdit || isUploadingAudio ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{isUploadingAudio ? 'Odyo ap monte...' : 'Anrejistreman...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Anrejistre Modifikasyon</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

@@ -33,6 +33,54 @@ export function getAudioDuration(fileOrUrl: File | Blob | string): Promise<numbe
   });
 }
 
+/**
+ * Resolves any audio URL (IndexedDB, relative server path, blob, or absolute URL) into a playable URL
+ */
+export async function resolvePlayableAudioUrl(audioUrl?: string | null): Promise<string> {
+  if (!audioUrl || typeof audioUrl !== 'string') return '';
+  const trimmed = audioUrl.trim();
+  if (!trimmed || trimmed.startsWith('data:image')) return '';
+
+  // 1. IndexedDB key (e.g. 'idb:audio_admin_123')
+  if (trimmed.startsWith('idb:')) {
+    const fromIdb = await IdbStorage.resolveMediaUrl(trimmed);
+    if (fromIdb) return fromIdb;
+  }
+
+  // 2. Blob or Data URL (audio)
+  if (trimmed.startsWith('blob:') || trimmed.startsWith('data:audio') || trimmed.startsWith('data:video')) {
+    return trimmed;
+  }
+
+  // 3. Absolute HTTP/HTTPS URL
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && trimmed.startsWith('http://')) {
+      if (trimmed.includes('upmizik.com')) {
+        return trimmed.replace('http://', 'https://');
+      }
+    }
+    return trimmed;
+  }
+
+  // 4. Relative paths like /backend/uploads/music/... or uploads/music/... or music_123.mp3
+  let path = trimmed;
+  if (!path.startsWith('/')) {
+    if (path.startsWith('uploads/')) {
+      path = '/' + path;
+    } else if (path.startsWith('music_') || path.endsWith('.mp3') || path.endsWith('.wav') || path.endsWith('.m4a') || path.endsWith('.ogg')) {
+      path = '/backend/uploads/music/' + path;
+    } else {
+      path = '/backend/uploads/' + path;
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}${path}`;
+  }
+
+  return path;
+}
+
 class SoundEngine {
   private ctx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -132,12 +180,12 @@ class SoundEngine {
     this.currentTime = 0;
     this.duration = dur > 0 ? dur : 180;
 
-    const resolvedUrl = audioUrl?.startsWith('idb:') ? await IdbStorage.resolveMediaUrl(audioUrl) : audioUrl;
+    const resolvedUrl = await resolvePlayableAudioUrl(audioUrl);
 
-    if (resolvedUrl && (resolvedUrl.startsWith('http') || resolvedUrl.startsWith('blob:') || resolvedUrl.startsWith('data:audio'))) {
+    if (resolvedUrl) {
       try {
         this.htmlAudio = new Audio();
-        this.htmlAudio.crossOrigin = 'anonymous';
+        this.htmlAudio.preload = 'auto';
         this.htmlAudio.src = resolvedUrl;
         this.htmlAudio.volume = this.isMuted ? 0 : this.currentVolume;
         
@@ -164,21 +212,38 @@ class SoundEngine {
           this.emitTime(this.duration, this.duration);
         };
 
-        this.htmlAudio.onerror = () => {
+        this.htmlAudio.onerror = (e) => {
+          console.warn('[AudioEngine] HTMLAudioElement load error:', resolvedUrl, this.htmlAudio?.error);
+          // Automatic retry fallback between /backend/uploads/ and /uploads/
+          if (resolvedUrl.includes('/backend/uploads/') && this.htmlAudio) {
+            const fallback = resolvedUrl.replace('/backend/uploads/', '/uploads/');
+            console.log('[AudioEngine] Retrying with /uploads/ fallback:', fallback);
+            this.htmlAudio.src = fallback;
+            this.htmlAudio.load();
+            if (this.isPlaying) {
+              this.htmlAudio.play().catch(() => this.startTimeSimulation());
+            }
+            return;
+          }
           this.pause();
         };
 
         if (this.isPlaying) {
-          this.htmlAudio.play().catch(() => {
-            this.startTimeSimulation();
-          });
+          const playPromise = this.htmlAudio.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+              console.warn('[AudioEngine] Play failed or autoplay prevented:', err);
+              this.startTimeSimulation();
+            });
+          }
         }
         return;
-      } catch {
+      } catch (err) {
+        console.warn('[AudioEngine] Audio initialization error:', err);
         this.pause();
       }
     } else {
-      // If no valid uploaded audio URL is present, simulate smooth playback timer without emitting any noise
+      // If no audio URL is present, simulate smooth timer
       if (this.isPlaying) {
         this.startTimeSimulation();
       }
@@ -189,9 +254,13 @@ class SoundEngine {
     this.isPlaying = true;
 
     if (this.htmlAudio) {
-      this.htmlAudio.play().catch(() => {
-        this.startTimeSimulation();
-      });
+      const playPromise = this.htmlAudio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn('[AudioEngine] Play promise rejected:', err);
+          this.startTimeSimulation();
+        });
+      }
     } else {
       this.startTimeSimulation();
     }
