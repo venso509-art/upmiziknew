@@ -395,6 +395,7 @@ export interface PaymentSettingsConfig {
   artistRegistrationFeeHtg?: number;
   methods: PaymentMethodItem[];
   globalNotice?: string;
+  top3Override?: { enabled: boolean; topIds: string[] };
   updatedAt?: string;
 }
 

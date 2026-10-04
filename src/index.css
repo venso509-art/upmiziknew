@@ -7,6 +7,7 @@
 
 @layer base {
   html {
+    scroll-behavior: smooth;
     touch-action: manipulation;
     -webkit-text-size-adjust: 100%;
   }
@@ -355,13 +356,20 @@ body[data-theme="light"],
 }
 
 @keyframes scaleUp {
-  from {
+  0% {
     opacity: 0;
-    transform: scale(0.95);
   }
-  to {
+  100% {
     opacity: 1;
-    transform: scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
   }
 }
 
@@ -419,15 +427,15 @@ body[data-theme="light"],
 }
 
 .animate-fadeIn {
-  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-slideUp {
-  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-scaleUp {
-  animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: scaleUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-ambientGlow {
@@ -438,42 +446,46 @@ body[data-theme="light"],
    MODAL ENTRANCE & SMOOTH FLUID SLIDE-OUT / EXIT ANIMATIONS
    ========================================================= */
 @keyframes modalBackdropIn {
-  from {
+  0% {
     opacity: 0;
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
   }
-  to {
+  100% {
     opacity: 1;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
   }
 }
 
 @keyframes modalBackdropOut {
-  from {
+  0% {
     opacity: 1;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
   }
-  to {
+  100% {
     opacity: 0;
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
   }
 }
 
 @keyframes modalContentIn {
   0% {
     opacity: 0;
-    transform: translateY(20px) scale(0.95);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 
 @keyframes modalContentOut {
   0% {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
   100% {
     opacity: 0;
-    transform: translateY(32px) scale(0.94);
   }
 }
 
@@ -500,19 +512,19 @@ body[data-theme="light"],
 }
 
 .animate-modal-backdrop-in {
-  animation: modalBackdropIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: modalBackdropIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-modal-backdrop-out {
-  animation: modalBackdropOut 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: modalBackdropOut 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .animate-modal-in {
-  animation: modalContentIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: modalContentIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-modal-out {
-  animation: modalContentOut 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: modalContentOut 0.26s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .animate-modal-sheet-in {

@@ -151,6 +151,10 @@ class ApiService {
     }
   }
 
+  public async addArtist(artistData: Partial<ArtistUser>): Promise<{ success: boolean; artistId?: string; message?: string }> {
+    return this.registerArtist(artistData);
+  }
+
   public async validateArtist(artistId: string, accept: boolean, reason?: string): Promise<boolean> {
     try {
       const res = await fetch(`${this.baseUrl}/artists.php`, {
@@ -201,11 +205,13 @@ class ApiService {
     }
   }
 
-  public async deleteArtist(artistId: string): Promise<boolean> {
+  public async deleteArtist(artistId: string, deleteSongs: boolean = true): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/artists.php?id=${encodeURIComponent(artistId)}`, {
+      const url = `${this.baseUrl}/artists.php?id=${encodeURIComponent(artistId)}${deleteSongs ? '&deleteSongs=true' : ''}`;
+      const res = await fetch(url, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: artistId, deleteSongs }),
       });
       const data = await res.json().catch(() => null);
       return !!data?.success;

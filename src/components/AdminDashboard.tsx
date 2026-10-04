@@ -187,6 +187,7 @@ interface AdminDashboardProps {
   onSaveTop3Override: (override: { enabled: boolean; topIds: string[] }) => void;
   onValidateDonation: (donationId: string, accept: boolean) => void;
   onValidateArtist: (artistId: string, accept: boolean, reason?: string) => void;
+  onSaveArtist?: (artist: ArtistUser) => void;
   onPurgePendingValidations?: () => void;
   onSuspendArtist?: (artistId: string, days: number, reason?: string) => void;
   onReactivateArtist?: (artistId: string) => void;
@@ -226,6 +227,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSaveTop3Override,
   onValidateDonation,
   onValidateArtist,
+  onSaveArtist,
   onPurgePendingValidations,
   onSuspendArtist,
   onReactivateArtist,
@@ -9997,6 +9999,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 };
 
                 StorageService.saveArtist(newArtistObj);
+                if (onSaveArtist) {
+                  onSaveArtist(newArtistObj);
+                } else {
+                  HostingerService.saveSingleArtist(newArtistObj).catch(() => {});
+                  UpMizikAPI.addArtist(newArtistObj).catch(() => {});
+                  if (onValidateArtist) {
+                    onValidateArtist(newArtistObj.id, manualArtistStatus === 'active');
+                  }
+                }
                 window.dispatchEvent(new CustomEvent('upmizik_artist_updated', { detail: { action: 'create', artist: newArtistObj } }));
                 setShowAddManualArtistModal(false);
                 setArtistValidationFilter(manualArtistStatus);

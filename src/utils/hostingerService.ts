@@ -344,7 +344,7 @@ class HostingerSyncService {
       }
 
       // Efase nèt nan baz done MySQL Coolify a
-      await UpMizikAPI.deleteArtist(artistId).catch((apiErr) => {
+      await UpMizikAPI.deleteArtist(artistId, deleteSongs).catch((apiErr) => {
         console.warn('[HostingerService] Remote API deleteArtist error:', apiErr);
       });
 
@@ -394,16 +394,18 @@ class HostingerSyncService {
     }
     this.isRefetchingMusic = true;
     try {
+      const deletedMusicIds = StorageService.getDeletedMusicIds();
       const serverMusic = await UpMizikAPI.getMusics();
       if (serverMusic && serverMusic.length > 0) {
-        const localMusic = StorageService.getMusic();
-        const serverMap = new Map(serverMusic.map(m => [m.id, m]));
+        const activeServerMusic = serverMusic.filter(m => m && m.id && !deletedMusicIds.has(m.id));
+        const localMusic = StorageService.getMusic().filter(m => m && m.id && !deletedMusicIds.has(m.id));
+        const serverMap = new Map(activeServerMusic.map(m => [m.id, m]));
         const localMap = new Map(localMusic.map(m => [m.id, m]));
 
-        let hasDifferences = forceNotify || serverMusic.length !== localMusic.length;
+        let hasDifferences = forceNotify || activeServerMusic.length !== localMusic.length;
 
         if (!hasDifferences) {
-          for (const sm of serverMusic) {
+          for (const sm of activeServerMusic) {
             const lm = localMap.get(sm.id);
             if (!lm || lm.listens !== sm.listens || lm.title !== sm.title || lm.status !== sm.status) {
               hasDifferences = true;
@@ -413,9 +415,9 @@ class HostingerSyncService {
         }
 
         if (hasDifferences) {
-          const merged: MusicItem[] = [...serverMusic];
+          const merged: MusicItem[] = [...activeServerMusic];
           for (const lm of localMusic) {
-            if (!serverMap.has(lm.id)) {
+            if (!serverMap.has(lm.id) && !deletedMusicIds.has(lm.id)) {
               merged.push(lm);
               serverMap.set(lm.id, lm);
             }
@@ -563,6 +565,16 @@ class HostingerSyncService {
     try {
       StorageService.deleteMusic(musicId);
       this.emitChange('music', StorageService.getMusic());
+
+      // Efase dirèkteman sou sèvè MySQL Coolify / Hostinger
+      await UpMizikAPI.deleteMusic(musicId).catch((apiErr) => {
+        console.warn('[HostingerService] Remote API deleteMusic error:', apiErr);
+      });
+
+      // Re-senkronize pou asire tout sesyon yo aliyen
+      setTimeout(() => {
+        this.fetchMusicAndNotify(true).catch(() => {});
+      }, 300);
     } catch (e) {
       console.warn('[HostingerService] deleteMusic warn:', e);
     }

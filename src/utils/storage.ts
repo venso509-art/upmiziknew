@@ -70,6 +70,7 @@ const KEYS = {
   SITE_VISITS: 'upmizik_site_visits_v1',
   REMOVED_ARTISTS: 'upmizik_removed_artists_v2',
   DELETED_ARTIST_IDS: 'upmizik_deleted_artist_ids_v2',
+  DELETED_MUSIC_IDS: 'upmizik_deleted_music_ids_v2',
 };
 
 export const DEFAULT_PAYMENT_SETTINGS: PaymentSettingsConfig = {
@@ -400,7 +401,8 @@ export const StorageService = {
 
   // MUSIC
   getMusic: (): MusicItem[] => {
-    const list = getStoredData<MusicItem[]>(KEYS.MUSIC, INITIAL_MUSIC);
+    const deletedMusicIds = StorageService.getDeletedMusicIds();
+    const list = getStoredData<MusicItem[]>(KEYS.MUSIC, INITIAL_MUSIC).filter(m => !deletedMusicIds.has(m.id));
     const enhanced = list.map((m, idx) => {
       let updated = { ...m };
       // Nouvo moso oswa moso ki poko gen ekout dwe kòmanse ak 0 pataj, pa atifisyèlman 1
@@ -434,10 +436,16 @@ export const StorageService = {
     return StorageService.normalizeMusicPositions(enhanced);
   },
   saveMusic: (data: MusicItem[] | MusicItem) => {
+    const deletedMusicIds = StorageService.getDeletedMusicIds();
     if (Array.isArray(data)) {
-      const normalized = StorageService.normalizeMusicPositions(data);
+      const activeList = data.filter(m => m && m.id && !deletedMusicIds.has(m.id));
+      const normalized = StorageService.normalizeMusicPositions(activeList);
       setStoredData(KEYS.MUSIC, normalized);
       return;
+    }
+
+    if (data.id) {
+      StorageService.removeDeletedMusicId(data.id);
     }
 
     const current = StorageService.getMusic();
@@ -505,6 +513,7 @@ export const StorageService = {
     } catch {}
   },
   deleteMusic: (musicId: string) => {
+    StorageService.addDeletedMusicId(musicId);
     const list = StorageService.getMusic().filter(m => m.id !== musicId);
     const normalized = StorageService.normalizeMusicPositions(list);
     setStoredData(KEYS.MUSIC, normalized);
@@ -896,6 +905,26 @@ export const StorageService = {
     const altId = artistId.startsWith('art-') ? artistId.replace('art-', '') : `art-${artistId}`;
     const next = current.filter(id => id !== artistId && id !== altId && (!email || id !== email.trim().toLowerCase()));
     setStoredData(KEYS.DELETED_ARTIST_IDS, next);
+  },
+
+  getDeletedMusicIds: (): Set<string> => {
+    const list = getStoredData<string[]>(KEYS.DELETED_MUSIC_IDS, []);
+    return new Set(list);
+  },
+
+  addDeletedMusicId: (musicId: string) => {
+    if (!musicId) return;
+    const current = getStoredData<string[]>(KEYS.DELETED_MUSIC_IDS, []);
+    const next = new Set(current);
+    next.add(musicId);
+    setStoredData(KEYS.DELETED_MUSIC_IDS, Array.from(next));
+  },
+
+  removeDeletedMusicId: (musicId: string) => {
+    if (!musicId) return;
+    const current = getStoredData<string[]>(KEYS.DELETED_MUSIC_IDS, []);
+    const next = current.filter(id => id !== musicId);
+    setStoredData(KEYS.DELETED_MUSIC_IDS, next);
   },
 
   // ARTISTS

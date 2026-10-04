@@ -139,7 +139,7 @@ export const MusicCard: React.FC<MusicCardProps> = ({
   return (
     <div
       id={`music-card-${music.id}`}
-      className="group relative flex flex-col justify-between bg-[#0a0f1d]/80 backdrop-blur-xl rounded-3xl overflow-hidden border border-white/[0.08] hover:border-white/[0.18] hover:bg-[#0e1628]/90 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-950/40 hover:-translate-y-1"
+      className="group relative flex flex-col justify-between bg-[#0a0f1d]/85 backdrop-blur-xl rounded-3xl overflow-hidden border border-white/[0.08] hover:border-white/[0.22] hover:bg-[#0d1527]/95 transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] hover:shadow-2xl hover:shadow-black/70 hover:-translate-y-1.5"
     >
       {/* Floating Hearts Particles Burst Container */}
       <FloatingHearts hearts={floatingHearts} />

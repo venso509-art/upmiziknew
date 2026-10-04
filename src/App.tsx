@@ -51,6 +51,7 @@ import { ArtistStoryBar } from './components/ArtistStoryBar';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { FontSelectorModal, FONT_OPTIONS } from './components/FontSelectorModal';
 import { AppSplashScreen } from './components/AppSplashScreen';
+import { ScrollReveal } from './components/ScrollReveal';
 
 /**
  * Fonksyon sekirize pou voye notifikasyon natif nan navigatè a (Browser Notification API)
@@ -334,6 +335,8 @@ export default function App() {
   const [playbackProgress, setPlaybackProgress] = useState(0);
   const [playbackSeconds, setPlaybackSeconds] = useState(0);
   const [hasListened5s, setHasListened5s] = useState(false);
+  const [playerVolume, setPlayerVolume] = useState(0.9);
+  const [playerMuted, setPlayerMuted] = useState(false);
 
   // Toasts ak Verifikasyon Wòl Itilizatè Strik (Role-Based Notification Guard)
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -852,6 +855,16 @@ export default function App() {
     }
   }, [currentView, currentAdmin]);
 
+  // Lè itilizatè a retounen oswa navige sou vi 'public' la, senkronize tout mizik ak atis ki fèk modifye imedyatman
+  useEffect(() => {
+    if (currentView === 'public') {
+      setMusicList(StorageService.getMusic());
+      setArtists(StorageService.getArtists());
+      HostingerService.fetchMusicAndNotify(true).catch(() => {});
+      HostingerService.fetchArtistsAndNotify(true).catch(() => {});
+    }
+  }, [currentView]);
+
   // Pwoteksyon Espas Atis (artist_dashboard route guard):
   // Menm si yon atis gen imèl ak kòd, si status li pa 'active', li pap ka rete oswa aksede artist_dashboard.
   // Wout la voye l tounen sou 'public' otomatikman ak yon mesaj notifikasyon ki koresponn.
@@ -1021,9 +1034,6 @@ export default function App() {
     setCurrentTrack(null);
   };
 
-  const [playerVolume, setPlayerVolume] = useState(0.9);
-  const [playerMuted, setPlayerMuted] = useState(false);
-
   const handleSeek = (seconds: number) => {
     globalSoundEngine.seek(seconds);
     setPlaybackSeconds(seconds);
@@ -1051,10 +1061,14 @@ export default function App() {
   // Top 3 computation (Only active/published tracks belonging to active artists)
   const top3Songs = useMemo(() => {
     const activeList = musicList.filter(m => {
-      if (m.status !== 'active' && m.status) return false;
+      const rawStatus = String(m.status || (m as any).statut || '').toLowerCase();
+      if (rawStatus && rawStatus !== 'active' && rawStatus !== 'actif') return false;
       const artist = artists.find(a => a.id === m.artistId);
-      if (artist && (artist.status === 'suspended' || artist.status === 'rejected' || (artist as any)?.status === 'retired')) {
-        return false;
+      if (artist) {
+        const artStatus = String(artist.status || (artist as any).statut || '').toLowerCase();
+        if (artStatus === 'suspended' || artStatus === 'suspendu' || artStatus === 'rejected' || artStatus === 'rejete' || artStatus === 'retired') {
+          return false;
+        }
       }
       return true;
     });
@@ -1070,32 +1084,38 @@ export default function App() {
 
   // Active/Approved Artists only (Exclude pending registration, rejected, suspended, or retired/removed artists from public view)
   const activeArtists = useMemo(() => {
-    return (artists || []).filter(
-      (a) =>
-        a &&
-        (a.status === 'active' || !a.status) &&
-        a.status !== 'pending' &&
-        a.status !== 'rejected' &&
-        a.status !== 'suspended' &&
-        (a as any).status !== 'retired'
-    );
+    return (artists || []).filter((a) => {
+      if (!a) return false;
+      const rawStatus = String(a.status || (a as any).statut || '').toLowerCase();
+      const isPending = rawStatus === 'pending' || rawStatus === 'en_attente';
+      const isRejected = rawStatus === 'rejected' || rawStatus === 'rejete';
+      const isSuspended = rawStatus === 'suspended' || rawStatus === 'suspendu';
+      const isRetired = rawStatus === 'retired';
+      if (isPending || isRejected || isSuspended || isRetired) return false;
+      return rawStatus === 'active' || rawStatus === 'actif' || !rawStatus;
+    });
   }, [artists]);
 
   // Filtered Music List for Feed (Only active/published tracks from active artists are public)
   const filteredMusic = useMemo(() => {
     return musicList.filter((item) => {
-      const isPublished = item.status === 'active' || !item.status;
+      const rawStatus = String(item.status || (item as any).statut || '').toLowerCase();
+      const isPublished = rawStatus === 'active' || rawStatus === 'actif' || !rawStatus;
       if (!isPublished) return false;
 
       // Anpeche nenpòt mizik yon atis ki sispann, retire oswa rejte parèt sou sit la
       const artist = artists.find((a) => a.id === item.artistId);
-      if (
-        artist &&
-        (artist.status === 'suspended' ||
-          artist.status === 'rejected' ||
-          (artist as any)?.status === 'retired')
-      ) {
-        return false;
+      if (artist) {
+        const rawArtStatus = String(artist.status || (artist as any).statut || '').toLowerCase();
+        if (
+          rawArtStatus === 'suspended' ||
+          rawArtStatus === 'suspendu' ||
+          rawArtStatus === 'rejected' ||
+          rawArtStatus === 'rejete' ||
+          rawArtStatus === 'retired'
+        ) {
+          return false;
+        }
       }
 
       const matchSearch =
@@ -1376,14 +1396,15 @@ export default function App() {
     }
   };
 
-  const handleDeleteMusicItem = (musicId: string) => {
+  const handleDeleteMusicItem = async (musicId: string) => {
     if (currentTrack && currentTrack.id === musicId) {
       globalSoundEngine.stop();
       setIsPlaying(false);
       setCurrentTrack(null);
     }
     StorageService.deleteMusic(musicId);
-    HostingerService.deleteMusic(musicId);
+    await HostingerService.deleteMusic(musicId);
+    await UpMizikAPI.deleteMusic(musicId);
     setMusicList(StorageService.getMusic());
     setArtists(StorageService.getArtists());
     setRecRefreshKey(prev => prev + 1);
@@ -1398,10 +1419,16 @@ export default function App() {
     addToast('success', 'Pòs atis la siprime avèk siksè!');
   };
 
-  const handleSaveTop3Override = (override: { enabled: boolean; topIds: string[] }) => {
+  const handleSaveTop3Override = async (override: { enabled: boolean; topIds: string[] }) => {
     StorageService.saveTop3Override(override);
     setTop3Override(override);
     addToast('success', 'Konfigirasyon Top 3 anrejistre!', 'admin');
+    try {
+      const currentSettings = StorageService.getPaymentSettings();
+      await UpMizikAPI.savePaymentSettings({ ...currentSettings, top3Override: override });
+    } catch (err) {
+      console.warn('[handleSaveTop3Override] Remote settings sync warning:', err);
+    }
   };
 
   const handleValidateDonation = async (donationId: string, accept: boolean) => {
@@ -1550,10 +1577,10 @@ export default function App() {
     );
   };
 
-  const handleSuspendArtist = async (artistId: string, days: number, reason?: string) => {
+  const handleSuspendArtist = async (artistId: string, days: number, reason?: string, hideSongs = true) => {
     const adminName = currentAdmin?.name || 'Mr Clauvens';
     const cleanReason = reason?.trim() || 'Vyolasyon règ ak kondisyon itilizasyon platfòm UpMizik la';
-    const result = StorageService.suspendArtist(artistId, days, cleanReason, adminName);
+    const result = StorageService.suspendArtist(artistId, days, cleanReason, adminName, hideSongs);
     if (result.artist) {
       await HostingerService.saveSingleArtist(result.artist);
       await UpMizikAPI.setArtistStatus(artistId, 'suspended', cleanReason);
@@ -1563,6 +1590,9 @@ export default function App() {
     }
     const updatedArtists = StorageService.getArtists();
     setArtists(updatedArtists);
+    if (hideSongs) {
+      setMusicList(StorageService.getMusic());
+    }
 
     if (currentArtist && currentArtist.id === artistId) {
       setCurrentArtist(null);
@@ -1600,6 +1630,7 @@ export default function App() {
     }
     const updatedArtists = StorageService.getArtists();
     setArtists(updatedArtists);
+    setMusicList(StorageService.getMusic());
 
     if (result.artist) {
       addToast(
@@ -1607,6 +1638,21 @@ export default function App() {
         `✅ Atis "${result.artist.stageName}" re-entegre avèk siksè sou UpMizik! Kont lan aktif kounye a.`,
         'admin'
       );
+    }
+  };
+
+  const handleSaveArtist = async (artist: ArtistUser) => {
+    StorageService.saveArtist(artist);
+    setArtists(StorageService.getArtists());
+    addToast('success', `Atis "${artist.stageName}" anrejistre avèk siksè nan sistèm nan!`, 'admin');
+    try {
+      await HostingerService.saveSingleArtist(artist);
+      await UpMizikAPI.registerArtist(artist);
+      setTimeout(() => {
+        HostingerService.fetchArtistsAndNotify(true).catch(() => {});
+      }, 300);
+    } catch (err) {
+      console.warn('[handleSaveArtist] Remote sync warning:', err);
     }
   };
 
@@ -1681,17 +1727,19 @@ export default function App() {
     }
   };
 
-  const handleSavePubs = (newPubs: PubItem[]) => {
+  const handleSavePubs = async (newPubs: PubItem[]) => {
     StorageService.savePubs(newPubs);
-    HostingerService.syncPubs(newPubs);
     setPubs(newPubs);
+    await HostingerService.syncPubs(newPubs);
+    await UpMizikAPI.syncAllData({ pubs: newPubs });
     addToast('success', 'Piblisite yo mete ajou!', 'admin');
   };
 
-  const handleSaveRpa = (newRpa: RpaItem[]) => {
+  const handleSaveRpa = async (newRpa: RpaItem[]) => {
     StorageService.saveRpa(newRpa);
-    HostingerService.syncRpa(newRpa);
     setRpaList(newRpa);
+    await HostingerService.syncRpa(newRpa);
+    await UpMizikAPI.syncAllData({ rpa: newRpa });
     addToast('success', 'Ribrik Pouse Atis (RPA) mete ajou!', 'admin');
   };
 
@@ -1790,8 +1838,15 @@ export default function App() {
         onOpenOfflineModal={() => handleOpenOfflineModal('playlists')}
       />
 
+      {/* International Ambient Stage Glows (Subtle, high-end streaming atmosphere) */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
+        <div className="absolute top-[8%] left-[-15%] w-[55vw] h-[55vw] max-w-[650px] max-h-[650px] rounded-full bg-blue-600/[0.045] blur-[150px]" />
+        <div className="absolute top-[35%] right-[-15%] w-[50vw] h-[50vw] max-w-[600px] max-h-[600px] rounded-full bg-red-600/[0.04] blur-[160px]" />
+        <div className="absolute top-[65%] left-[8%] w-[45vw] h-[45vw] max-w-[500px] max-h-[500px] rounded-full bg-amber-500/[0.035] blur-[140px]" />
+      </div>
+
       {/* Main Body View Switching */}
-      <main className="flex-1 w-full pb-36 md:pb-24">
+      <main className="relative z-10 flex-1 w-full pb-36 md:pb-24">
         {currentView === 'public' && (
           <div className="space-y-10 sm:space-y-14 animate-fadeIn">
             {/* Hero Search & Stats Banner */}
@@ -1812,124 +1867,142 @@ export default function App() {
             />
 
             {/* Top Trending 3 Haitian Songs */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <TopTrending
-                topMusic={top3Songs}
-                currentPlayingId={currentTrack?.id || null}
-                isPlaying={isPlaying}
-                onPlayToggle={handlePlayToggle}
-                onOpenSupport={(m) => setMusicToSupport(m)}
-                onOpenArtistProfile={handleOpenArtistProfile}
-                onShare={handleShare}
-                onOpenArtistAuth={() => setShowArtistAuth(true)}
-              />
-            </div>
+            <ScrollReveal delayMs={30} distancePx={24}>
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <TopTrending
+                  topMusic={top3Songs}
+                  currentPlayingId={currentTrack?.id || null}
+                  isPlaying={isPlaying}
+                  onPlayToggle={handlePlayToggle}
+                  onOpenSupport={(m) => setMusicToSupport(m)}
+                  onOpenArtistProfile={handleOpenArtistProfile}
+                  onShare={handleShare}
+                  onOpenArtistAuth={() => setShowArtistAuth(true)}
+                />
+              </div>
+            </ScrollReveal>
 
             {/* WhatsApp-Style Artist Story & Profile Circles (Top 5 Listened / Algorithmic Recommendations) */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <ArtistStoryBar
-                artists={activeArtists}
-                musicList={musicList}
-                onOpenArtistProfile={handleOpenArtistProfile}
-              />
-            </div>
+            <ScrollReveal delayMs={40} distancePx={24}>
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <ArtistStoryBar
+                  artists={activeArtists}
+                  musicList={musicList}
+                  onOpenArtistProfile={handleOpenArtistProfile}
+                />
+              </div>
+            </ScrollReveal>
 
             {/* Top 10 Artist Leaderboard (Klasman Atis Pa Donasyon) */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <ArtistLeaderboard
-                artists={activeArtists}
-                musicList={musicList}
-                currentPlayingId={currentTrack?.id || null}
-                isPlaying={isPlaying}
-                onPlayToggle={handlePlayToggle}
-                onOpenSupport={(m) => setMusicToSupport(m)}
-                onOpenArtistProfile={handleOpenArtistProfile}
-                onOpenArtistAuth={() => setShowArtistAuth(true)}
-              />
-            </div>
+            <ScrollReveal delayMs={40} distancePx={24}>
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <ArtistLeaderboard
+                  artists={activeArtists}
+                  musicList={musicList}
+                  currentPlayingId={currentTrack?.id || null}
+                  isPlaying={isPlaying}
+                  onPlayToggle={handlePlayToggle}
+                  onOpenSupport={(m) => setMusicToSupport(m)}
+                  onOpenArtistProfile={handleOpenArtistProfile}
+                  onOpenArtistAuth={() => setShowArtistAuth(true)}
+                />
+              </div>
+            </ScrollReveal>
 
             {/* RPA Section (Ribrik Pouse Atis) */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <RpaSection rpaList={rpaList} />
-            </div>
+            <ScrollReveal delayMs={40} distancePx={24}>
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <RpaSection rpaList={rpaList} />
+              </div>
+            </ScrollReveal>
 
             {/* 'Atis Pou Ou' (Recommended for You) Smart Heuristic Section */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <RecommendedSection
-                key={`rec-sec-${recRefreshKey}`}
-                musicList={musicList}
-                currentPlayingId={currentTrack?.id || null}
-                isPlaying={isPlaying}
-                onPlayToggle={handlePlayToggle}
-                onOpenSupport={(m) => setMusicToSupport(m)}
-                onOpenComment={(m) => setMusicForComment(m)}
-                onOpenArtistProfile={handleOpenArtistProfile}
-                onShare={handleShare}
-                onHistoryReset={() => {
-                  setRecRefreshKey(prev => prev + 1);
-                  addToast('info', 'Rekòmandasyon yo re-inisyalize!');
-                }}
-              />
-            </div>
+            <ScrollReveal delayMs={40} distancePx={24}>
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <RecommendedSection
+                  key={`rec-sec-${recRefreshKey}`}
+                  musicList={musicList}
+                  currentPlayingId={currentTrack?.id || null}
+                  isPlaying={isPlaying}
+                  onPlayToggle={handlePlayToggle}
+                  onOpenSupport={(m) => setMusicToSupport(m)}
+                  onOpenComment={(m) => setMusicForComment(m)}
+                  onOpenArtistProfile={handleOpenArtistProfile}
+                  onShare={handleShare}
+                  onHistoryReset={() => {
+                    setRecRefreshKey(prev => prev + 1);
+                    addToast('info', 'Rekòmandasyon yo re-inisyalize!');
+                  }}
+                />
+              </div>
+            </ScrollReveal>
 
             {/* Category Filter Chips */}
-            <div id="music-feed-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
-              <CategoryFilter
-                selectedCategory={selectedCategory as MusicCategory}
-                onSelectCategory={handleSelectCategory}
-                offlineCount={cachedTrackIds.length}
-                onOpenOfflineModal={() => handleOpenOfflineModal('playlists')}
-              />
-            </div>
+            <ScrollReveal delayMs={30} distancePx={20}>
+              <div id="music-feed-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
+                <CategoryFilter
+                  selectedCategory={selectedCategory as MusicCategory}
+                  onSelectCategory={handleSelectCategory}
+                  offlineCount={cachedTrackIds.length}
+                  onOpenOfflineModal={() => handleOpenOfflineModal('playlists')}
+                />
+              </div>
+            </ScrollReveal>
 
             {/* Main Music Feed (Fluid CSS Grid / Carousel on Mobile) */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <MusicGrid
-                musicList={filteredMusic}
-                currentPlayingId={currentTrack?.id || null}
-                isPlaying={isPlaying}
-                playbackProgress={playbackProgress}
-                playbackSeconds={playbackSeconds}
-                hasListened5s={hasListened5s}
-                cachedTrackIds={cachedTrackIds}
-                onPlayToggle={handlePlayToggle}
-                onOpenSupport={(m) => setMusicToSupport(m)}
-                onOpenComment={(m) => setMusicForComment(m)}
-                onOpenArtistProfile={handleOpenArtistProfile}
-                onShare={handleShare}
-                onDownloadOffline={handleDownloadOffline}
-                onAddToOfflineQueue={handleAddToOfflineQueue}
-                searchQuery={searchQuery}
-                selectedCategory={selectedCategory}
-              />
-            </div>
+            <ScrollReveal delayMs={40} distancePx={24}>
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <MusicGrid
+                  musicList={filteredMusic}
+                  currentPlayingId={currentTrack?.id || null}
+                  isPlaying={isPlaying}
+                  playbackProgress={playbackProgress}
+                  playbackSeconds={playbackSeconds}
+                  hasListened5s={hasListened5s}
+                  cachedTrackIds={cachedTrackIds}
+                  onPlayToggle={handlePlayToggle}
+                  onOpenSupport={(m) => setMusicToSupport(m)}
+                  onOpenComment={(m) => setMusicForComment(m)}
+                  onOpenArtistProfile={handleOpenArtistProfile}
+                  onShare={handleShare}
+                  onDownloadOffline={handleDownloadOffline}
+                  onAddToOfflineQueue={handleAddToOfflineQueue}
+                  searchQuery={searchQuery}
+                  selectedCategory={selectedCategory}
+                />
+              </div>
+            </ScrollReveal>
 
             {/* UpMizik Social Feed (Live X/Twitter & Instagram posts from registered Haitian artists) */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <UpMizikSocial
-                posts={socialPosts}
-                artists={artists}
-                musicList={musicList}
-                currentArtist={currentArtist}
-                currentPlayingId={currentTrack?.id || null}
-                isPlaying={isPlaying}
-                isAdmin={Boolean(currentAdmin)}
-                onPlayToggle={handlePlayToggle}
-                onOpenSupport={(m) => setMusicToSupport(m)}
-                onOpenArtistProfile={handleOpenArtistProfile}
-                onShare={handleShare}
-                onDeletePost={handleDeleteSocialPost}
-                onNewPostAdded={(newPost) => {
-                  setSocialPosts(StorageService.getSocialPosts());
-                  addToast('success', 'UpMizik Social mete ajou avèk siksè!');
-                }}
-              />
-            </div>
+            <ScrollReveal delayMs={40} distancePx={24}>
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <UpMizikSocial
+                  posts={socialPosts}
+                  artists={artists}
+                  musicList={musicList}
+                  currentArtist={currentArtist}
+                  currentPlayingId={currentTrack?.id || null}
+                  isPlaying={isPlaying}
+                  isAdmin={Boolean(currentAdmin)}
+                  onPlayToggle={handlePlayToggle}
+                  onOpenSupport={(m) => setMusicToSupport(m)}
+                  onOpenArtistProfile={handleOpenArtistProfile}
+                  onShare={handleShare}
+                  onDeletePost={handleDeleteSocialPost}
+                  onNewPostAdded={(newPost) => {
+                    setSocialPosts(StorageService.getSocialPosts());
+                    addToast('success', 'UpMizik Social mete ajou avèk siksè!');
+                  }}
+                />
+              </div>
+            </ScrollReveal>
 
             {/* Partner Advertising (3 Pubs) */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <PubsBanner pubs={pubs} />
-            </div>
+            <ScrollReveal delayMs={40} distancePx={24}>
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <PubsBanner pubs={pubs} />
+              </div>
+            </ScrollReveal>
           </div>
         )}
 
@@ -1995,6 +2068,7 @@ export default function App() {
             onSaveTop3Override={handleSaveTop3Override}
             onValidateDonation={handleValidateDonation}
             onValidateArtist={handleValidateArtist}
+            onSaveArtist={handleSaveArtist}
             onPurgePendingValidations={handlePurgeAllPendingValidations}
             onSuspendArtist={handleSuspendArtist}
             onReactivateArtist={handleReactivateArtist}
