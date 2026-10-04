@@ -399,18 +399,6 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // Lock body scroll whenever a modal is open so that the page doesn't scroll underneath
-  useEffect(() => {
-    const isModalActive = Boolean(showAddModal || editingSong || showBlockedDialog || deleteConfirmId);
-    if (isModalActive) {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = originalOverflow;
-      };
-    }
-  }, [showAddModal, editingSong, showBlockedDialog, deleteConfirmId]);
-
   // Available registered artists for collaboration linking (excluding current artist)
   const registeredArtists = StorageService.getArtists().filter(
     (a) => a.id !== currentArtist.id && (a.status === 'active' || !a.status)
@@ -2100,7 +2088,7 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
       {/* ADD NEW SONG MODAL */}
       {showAddModal && (
         <div
-          className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fadeIn"
+          className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md overflow-y-auto modal-backdrop-scroll p-3 sm:p-6 flex justify-center items-start animate-fadeIn"
           onClick={(e) => {
             if (e.target === e.currentTarget) setShowAddModal(false);
           }}
@@ -2533,7 +2521,7 @@ export const ArtistDashboard: React.FC<ArtistDashboardProps> = ({
       {/* EDIT SONG MODAL */}
       {editingSong && (
         <div
-          className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fadeIn"
+          className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md overflow-y-auto modal-backdrop-scroll p-3 sm:p-6 flex justify-center items-start animate-fadeIn"
           onClick={(e) => {
             if (e.target === e.currentTarget) setEditingSong(null);
           }}

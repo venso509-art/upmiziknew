@@ -77,10 +77,9 @@ export const MusicCard: React.FC<MusicCardProps> = ({
   const badgeInfo = getBadgeByDonations(music.totalDonations);
   const isLocallyCached = isCachedOffline || justDownloaded || offlineManager.isTrackCached(music.id);
 
-  const handleShareClick = () => {
+  const handleShareClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     onShare(music);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const handleLikeClick = (e: React.MouseEvent) => {
@@ -448,22 +447,14 @@ export const MusicCard: React.FC<MusicCardProps> = ({
           <button
             id={`music-card-share-btn-${music.id}`}
             onClick={handleShareClick}
-            className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-xs transition-all duration-200 ${
-              copiedLink
-                ? 'text-emerald-400 bg-emerald-950/90 border border-emerald-500/40 shadow-sm shadow-emerald-500/20'
-                : 'hover:text-blue-400 hover:bg-white/[0.06] text-slate-400 active:scale-95'
-            }`}
-            title="Pataje moso sa sou rezo sosyal yo"
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-xs transition-all duration-200 hover:text-cyan-400 hover:bg-white/[0.06] text-slate-400 active:scale-95"
+            title={`${music.sharesCount || 0} pataj sou rezo sosyal yo (WhatsApp, Facebook, elatriye)`}
             aria-label={`Pataje ${music.title} (${music.sharesCount || 0} pataj)`}
           >
-            <Share2 className={`w-3.5 h-3.5 transition-transform ${copiedLink ? 'scale-110 text-emerald-400' : ''}`} />
-            {copiedLink ? (
-              <span className="text-[10px] font-bold text-emerald-300">Kopye!</span>
-            ) : (
-              <span className="font-mono text-[11px] font-medium text-slate-300 group-hover/share:text-white">
-                {(music.sharesCount || 0).toLocaleString()}
-              </span>
-            )}
+            <Share2 className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="font-mono text-[11px] font-medium text-slate-300">
+              {(music.sharesCount || 0).toLocaleString()}
+            </span>
           </button>
 
         </div>

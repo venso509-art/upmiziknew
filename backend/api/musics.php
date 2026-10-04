@@ -267,10 +267,35 @@ if ($method === 'GET') {
 }
 
 // ----------------------------------------------------------
-// POST: Ajoute yon nouvo mizik
+// POST: Ajoute yon nouvo mizik oswa enkremente aksyon
 // ----------------------------------------------------------
 if ($method === 'POST') {
     $data = getJsonInput();
+
+    // 1. Enkremente kout zòrèy / play sou POST
+    $action = $data['action'] ?? null;
+    if ($action === 'play' || $action === 'listen' || $action === 'stream') {
+        $musicId = $data['musicId'] ?? $data['id'] ?? null;
+        if (!$musicId) {
+            jsonResponse(['success' => false, 'message' => 'Id mizik la obligatwa.'], 400);
+        }
+        $stmt = $pdo->prepare("UPDATE musiques SET ecoutes = ecoutes + 1 WHERE id = ?");
+        $stmt->execute([$musicId]);
+
+        $artStmt = $pdo->prepare("SELECT artiste_id FROM musiques WHERE id = ?");
+        $artStmt->execute([$musicId]);
+        $artId = $artStmt->fetchColumn();
+        if ($artId) {
+            $pdo->prepare("UPDATE artistes SET total_ecoutes = total_ecoutes + 1 WHERE id = ?")->execute([$artId]);
+        }
+
+        jsonResponse([
+            'success' => true,
+            'message' => 'Ekout anrejistre avèk siksè nan MySQL.',
+            'musicId' => $musicId,
+            'errors' => []
+        ]);
+    }
 
     if (empty($data['title']) || empty($data['artistId'])) {
         jsonResponse([

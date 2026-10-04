@@ -69,6 +69,7 @@ const KEYS = {
   ARTIST_RATE_LIMITS: 'upmizik_artist_rate_limits_v1',
   SITE_VISITS: 'upmizik_site_visits_v1',
   REMOVED_ARTISTS: 'upmizik_removed_artists_v2',
+  DELETED_ARTIST_IDS: 'upmizik_deleted_artist_ids_v2',
 };
 
 export const DEFAULT_PAYMENT_SETTINGS: PaymentSettingsConfig = {
@@ -403,7 +404,13 @@ export const StorageService = {
     const enhanced = list.map((m, idx) => {
       let updated = { ...m };
       // Nouvo moso oswa moso ki poko gen ekout dwe kòmanse ak 0 pataj, pa atifisyèlman 1
-      if (typeof updated.sharesCount === 'undefined' || ((!updated.listens || updated.listens === 0) && updated.sharesCount === 1)) {
+      if (typeof updated.sharesCount !== 'number' || isNaN(updated.sharesCount) || updated.sharesCount < 0) {
+        updated.sharesCount = 0;
+      }
+      if (typeof updated.listens !== 'number' || isNaN(updated.listens) || updated.listens < 0) {
+        updated.listens = 0;
+      }
+      if (updated.listens === 0 && updated.sharesCount === 1) {
         updated.sharesCount = 0;
       }
       if (!updated.status) {
@@ -864,12 +871,43 @@ export const StorageService = {
     setStoredData(KEYS.TOP3_OVERRIDE, override);
   },
 
+  getDeletedArtistIds: (): Set<string> => {
+    const list = getStoredData<string[]>(KEYS.DELETED_ARTIST_IDS, []);
+    return new Set(list);
+  },
+
+  addDeletedArtistId: (artistId: string, email?: string) => {
+    const current = getStoredData<string[]>(KEYS.DELETED_ARTIST_IDS, []);
+    const next = new Set(current);
+    if (artistId) {
+      next.add(artistId);
+      if (artistId.startsWith('art-')) {
+        next.add(artistId.replace('art-', ''));
+      } else {
+        next.add(`art-${artistId}`);
+      }
+    }
+    if (email) next.add(email.trim().toLowerCase());
+    setStoredData(KEYS.DELETED_ARTIST_IDS, Array.from(next));
+  },
+
+  removeDeletedArtistId: (artistId: string, email?: string) => {
+    const current = getStoredData<string[]>(KEYS.DELETED_ARTIST_IDS, []);
+    const altId = artistId.startsWith('art-') ? artistId.replace('art-', '') : `art-${artistId}`;
+    const next = current.filter(id => id !== artistId && id !== altId && (!email || id !== email.trim().toLowerCase()));
+    setStoredData(KEYS.DELETED_ARTIST_IDS, next);
+  },
+
   // ARTISTS
   getArtists: (): ArtistUser[] => {
+    const deletedIds = StorageService.getDeletedArtistIds();
     const list = getStoredData<ArtistUser[]>(KEYS.ARTISTS, INITIAL_ARTISTS);
     
-    // Asire tout atis ki nan INITIAL_ARTISTS (tankou atis tès la) toujou parèt menm si localStorage te deja gen lòt done
+    // Asire tout atis ki nan INITIAL_ARTISTS parèt sòf si admin an te siprime yo
     for (const initArt of INITIAL_ARTISTS) {
+      if (deletedIds.has(initArt.id) || (initArt.email && deletedIds.has(initArt.email.toLowerCase()))) {
+        continue;
+      }
       if (!list.some(a => a.id === initArt.id || (a.email && initArt.email && a.email.toLowerCase() === initArt.email.toLowerCase()))) {
         list.unshift(initArt);
       }
@@ -904,7 +942,7 @@ export const StorageService = {
       return updated;
     });
 
-    // Deduplicate by ID and email so artists never show up multiple times
+    // Deduplicate by ID and email, and permanently exclude deleted artists
     const seenIds = new Set<string>();
     const seenEmails = new Set<string>();
     const deduplicated: ArtistUser[] = [];
@@ -912,6 +950,9 @@ export const StorageService = {
     for (const a of enrichedList) {
       if (!a || !a.id) continue;
       const cleanEmail = (a.email || '').trim().toLowerCase();
+      if (deletedIds.has(a.id) || (cleanEmail && deletedIds.has(cleanEmail))) {
+        continue;
+      }
       if (seenIds.has(a.id) || (cleanEmail && seenEmails.has(cleanEmail))) {
         continue;
       }
@@ -923,12 +964,16 @@ export const StorageService = {
     return deduplicated;
   },
   saveArtists: (list: ArtistUser[]) => {
+    const deletedIds = StorageService.getDeletedArtistIds();
     const seenIds = new Set<string>();
     const seenEmails = new Set<string>();
     const deduplicated: ArtistUser[] = [];
     for (const a of list) {
       if (!a || !a.id) continue;
       const cleanEmail = (a.email || '').trim().toLowerCase();
+      if (deletedIds.has(a.id) || (cleanEmail && deletedIds.has(cleanEmail))) {
+        continue;
+      }
       if (seenIds.has(a.id) || (cleanEmail && seenEmails.has(cleanEmail))) {
         continue;
       }
@@ -1277,6 +1322,7 @@ export const StorageService = {
     const baseArtist = foundInActive || foundInRemoved;
 
     if (baseArtist) {
+      StorageService.removeDeletedArtistId(artistId, baseArtist.email);
       reactivatedArtist = {
         ...baseArtist,
         status: 'active',
@@ -1337,30 +1383,21 @@ export const StorageService = {
   deleteArtist: (
     artistId: string,
     deleteAssociatedSongs = true,
-    permanentPurge = false
+    permanentPurge = true
   ): { success: boolean; deletedSongsCount: number; deletedArtist: ArtistUser | null } => {
     const list = StorageService.getArtists();
     const targetArtist = list.find(a => a.id === artistId) || null;
+
+    // Permanently record as deleted so it never gets repopulated
+    StorageService.addDeletedArtistId(artistId, targetArtist?.email);
+
     const updatedArtists = list.filter(a => a.id !== artistId);
     setStoredData(KEYS.ARTISTS, updatedArtists);
 
-    if (targetArtist && !permanentPurge) {
-      // Archive to REMOVED_ARTISTS so admin can re-integrate if desired
-      const archivedRecord: ArtistUser = {
-        ...targetArtist,
-        status: 'retired',
-        removedAt: new Date().toISOString(),
-        isPermanentlyRemoved: true,
-        removalReason: targetArtist.suspensionReason || 'Retire sou platfòm nan pa administratè a'
-      };
-      const removedList = StorageService.getRemovedArtists();
-      const filtered = removedList.filter(a => a.id !== artistId);
-      StorageService.saveRemovedArtists([archivedRecord, ...filtered]);
-    } else if (permanentPurge) {
-      const removedList = StorageService.getRemovedArtists();
-      const filtered = removedList.filter(a => a.id !== artistId);
-      StorageService.saveRemovedArtists(filtered);
-    }
+    // Remove from removed artists archive as well
+    const removedList = StorageService.getRemovedArtists();
+    const filtered = removedList.filter(a => a.id !== artistId);
+    StorageService.saveRemovedArtists(filtered);
 
     let deletedSongsCount = 0;
     if (deleteAssociatedSongs) {

@@ -184,16 +184,24 @@ class HostingerSyncService {
     }
     this.isRefetchingArtists = true;
     try {
+      const deletedIds = StorageService.getDeletedArtistIds();
       const serverArtists = await UpMizikAPI.getArtists();
       if (serverArtists && serverArtists.length > 0) {
+        // Exclude permanently deleted artists so they never get resurrected
+        const activeServerArtists = serverArtists.filter(sa => {
+          if (!sa || !sa.id) return false;
+          const cleanEmail = (sa.email || '').trim().toLowerCase();
+          return !deletedIds.has(sa.id) && (!cleanEmail || !deletedIds.has(cleanEmail));
+        });
+
         const localArtists = StorageService.getArtists();
-        const serverMap = new Map(serverArtists.map((a) => [a.id, a]));
+        const serverMap = new Map(activeServerArtists.map((a) => [a.id, a]));
         const localMap = new Map(localArtists.map((a) => [a.id, a]));
 
-        let hasDifferences = forceNotify || serverArtists.length !== localArtists.length;
+        let hasDifferences = forceNotify || activeServerArtists.length !== localArtists.length;
 
         if (!hasDifferences) {
-          for (const sa of serverArtists) {
+          for (const sa of activeServerArtists) {
             const la = localMap.get(sa.id);
             if (!la || la.status !== sa.status || la.stageName !== sa.stageName || la.registrationProofUrl !== sa.registrationProofUrl) {
               hasDifferences = true;
@@ -206,7 +214,7 @@ class HostingerSyncService {
           const merged: ArtistUser[] = [];
           const processedIds = new Set<string>();
 
-          for (const sa of serverArtists) {
+          for (const sa of activeServerArtists) {
             const la = localMap.get(sa.id);
             if (la) {
               merged.push({
@@ -222,7 +230,7 @@ class HostingerSyncService {
           }
 
           for (const la of localArtists) {
-            if (!processedIds.has(la.id)) {
+            if (!processedIds.has(la.id) && !deletedIds.has(la.id) && (!la.email || !deletedIds.has(la.email.trim().toLowerCase()))) {
               merged.push(la);
             }
           }

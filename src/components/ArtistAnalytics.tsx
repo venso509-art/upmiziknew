@@ -58,7 +58,7 @@ export const ArtistAnalytics: React.FC<ArtistAnalyticsProps> = ({
     const totalDonations = artistSongs.reduce((sum, s) => sum + (s.totalDonations || 0), 0);
 
     // Seed-like distribution factor based on artist stage name & song count
-    const seed = (currentArtist.stageName || 'Artist').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+    const seed = ((currentArtist?.stageName || 'Artist') as string).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
 
     let cumulativeListens = 0;
     let cumulativeDonations = 0;

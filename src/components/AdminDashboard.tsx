@@ -368,6 +368,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [musicYt, setMusicYt] = useState('');
   const [musicTiktok, setMusicTiktok] = useState('');
   const [musicIg, setMusicIg] = useState('');
+  const [deletedArtistIdsState, setDeletedArtistIdsState] = useState<Set<string>>(() => StorageService.getDeletedArtistIds());
 
   // Status Filter & Search State for Rapò Mizik
   const [musicStatusFilter, setMusicStatusFilter] = useState<'all' | 'active' | 'pending' | 'rejected'>('all');
@@ -647,47 +648,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   }, [clearAllLiveNotifications, onLogoutAdmin]);
 
-  // Lock body scroll whenever ANY modal or pop-up is active so page stays firmly targeted in place
+  // Lock body scroll whenever an Admin modal is open so the admin never loses their position
   useEffect(() => {
-    const isAnyModalActive = Boolean(
+    const isAnyAdminModalOpen = Boolean(
       showAddMusicModal ||
       showAddManualArtistModal ||
       suspendingArtistTarget ||
       deletingArtistTarget ||
       payingArtistTarget ||
-      selectedArtistDossier ||
-      selectedArtistForSongBreakdown ||
-      proofModalInfo ||
       proofModalUrl ||
-      showThresholdConfigModal ||
-      showSecurityAuthModal ||
-      showBulkRejectModal ||
-      showBulkSuspendModal ||
-      editingSong
+      proofModalInfo ||
+      proofModalDetails ||
+      selectedArtistDossier ||
+      artistRejectTarget ||
+      selectedArtistForSongBreakdown ||
+      editingSong ||
+      previewingCreditsSong
     );
-
-    if (isAnyModalActive) {
-      const original = document.body.style.overflow;
+    if (isAnyAdminModalOpen) {
+      const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
       document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = original;
-      };
+      if (scrollBarWidth > 0) {
+        document.body.style.paddingRight = `${scrollBarWidth}px`;
+      }
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
     }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+    };
   }, [
     showAddMusicModal,
     showAddManualArtistModal,
     suspendingArtistTarget,
     deletingArtistTarget,
     payingArtistTarget,
-    selectedArtistDossier,
-    selectedArtistForSongBreakdown,
-    proofModalInfo,
     proofModalUrl,
-    showThresholdConfigModal,
-    showSecurityAuthModal,
-    showBulkRejectModal,
-    showBulkSuspendModal,
-    editingSong
+    proofModalInfo,
+    proofModalDetails,
+    selectedArtistDossier,
+    artistRejectTarget,
+    selectedArtistForSongBreakdown,
+    editingSong,
+    previewingCreditsSong
   ]);
 
   const toggleLiveAudio = () => {
@@ -1148,18 +1153,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       baseList = artists || [];
     }
 
-    // Include removed/archived artists so Admin can view and re-integrate them at any time
-    try {
-      const removedArtists = StorageService.getRemovedArtists();
-      for (const rem of removedArtists) {
-        if (!baseList.some(a => a.id === rem.id)) {
-          baseList.push({
-            ...rem,
-            status: 'suspended'
-          });
-        }
-      }
-    } catch {}
+    // Filter out any permanently deleted artists
+    const deletedIds = StorageService.getDeletedArtistIds();
+    baseList = baseList.filter(a => a && a.id && !deletedIds.has(a.id) && !deletedArtistIdsState.has(a.id));
 
     // Merge with incoming artists prop from App.tsx
     const propMap = new Map<string, ArtistUser>((artists || []).map(a => [a.id, a]));
@@ -1188,7 +1184,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
       return finalArt;
     });
-  }, [realtimeFirestoreArtists, artists, internalRefreshKey, optimisticArtistStatus]);
+  }, [realtimeFirestoreArtists, artists, internalRefreshKey, optimisticArtistStatus, deletedArtistIdsState]);
 
   // Comprehensive calculation of each artist's monthly revenue & payouts (-15% + $0.99 fee)
   const artistsEarningStats = useMemo(() => {
@@ -5256,7 +5252,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             type="button"
                             onClick={() => {
                               if (window.confirm(`Èske w sèten ou vle efase demand atis "${art.stageName}" la nèt?`)) {
+                                setDeletedArtistIdsState((prev) => new Set([...prev, art.id]));
+                                StorageService.deleteArtist(art.id, true, true);
                                 if (onDeleteArtist) onDeleteArtist(art.id);
+                                setInternalRefreshKey((k) => k + 1);
                               }
                             }}
                             className="p-2 rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
@@ -8551,7 +8550,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         return (
           <div
-            className="fixed inset-0 z-[150] overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-xl animate-fadeIn p-3 sm:p-6 flex justify-center items-start sm:items-center"
+            className="fixed inset-0 z-[150] overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-xl animate-fadeIn p-3 sm:p-6 flex justify-center items-start"
             onClick={(e) => {
               if (e.target === e.currentTarget) setSuspendingArtistTarget(null);
             }}
@@ -8762,7 +8761,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* ARTIST DELETION CONFIRMATION MODAL */}
       {deletingArtistTarget && (
         <div
-          className="fixed inset-0 z-[150] overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-xl animate-fadeIn p-3 sm:p-6 flex justify-center items-start sm:items-center"
+          className="fixed inset-0 z-[150] overflow-y-auto modal-backdrop-scroll bg-black/85 backdrop-blur-xl animate-fadeIn p-3 sm:p-6 flex justify-center items-start"
           onClick={(e) => {
             if (e.target === e.currentTarget) setDeletingArtistTarget(null);
           }}
@@ -8810,18 +8809,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 type="button"
                 onClick={() => {
                   if (deletingArtistTarget) {
+                    const idToDelete = deletingArtistTarget.id;
+                    setDeletedArtistIdsState((prev) => new Set([...prev, idToDelete]));
+                    StorageService.deleteArtist(idToDelete, deleteArtistSongsOption, true);
                     if (onDeleteArtist) {
-                      onDeleteArtist(deletingArtistTarget.id, deleteArtistSongsOption);
-                    } else {
-                      StorageService.deleteArtist(deletingArtistTarget.id, deleteArtistSongsOption);
+                      onDeleteArtist(idToDelete, deleteArtistSongsOption);
                     }
                     setDeletingArtistTarget(null);
+                    setInternalRefreshKey((k) => k + 1);
                   }
                 }}
                 className="flex-1 py-3 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-950/50 flex items-center justify-center gap-1.5"
               >
                 <Trash2 className="w-4 h-4" />
-                <span>Konfime Retrè</span>
+                <span>Konfime Sipresyon Nèt</span>
               </button>
             </div>
           </div>
@@ -9928,7 +9929,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* ADD MANUAL ARTIST INTEGRATION DEMAND MODAL */}
       {showAddManualArtistModal && (
         <div
-          className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fadeIn"
+          className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md overflow-y-auto modal-backdrop-scroll p-3 sm:p-6 flex justify-center items-start animate-fadeIn"
           onClick={(e) => {
             if (e.target === e.currentTarget) setShowAddManualArtistModal(false);
           }}
@@ -10240,7 +10241,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* ADD / EDIT MUSIC POPUP MODAL (DIRÈKTEMAN SOU EKRAN ADMIN AN SAN SCROLL) */}
       {showAddMusicModal && (
         <div
-          className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fadeIn"
+          className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md overflow-y-auto modal-backdrop-scroll p-3 sm:p-6 flex justify-center items-start animate-fadeIn"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setShowAddMusicModal(false);

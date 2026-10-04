@@ -265,6 +265,20 @@ class ApiService {
     }
   }
 
+  public async incrementPlayCount(musicId: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/musics.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'play', musicId }),
+      });
+      const data = await res.json();
+      return !!data?.success;
+    } catch {
+      return false;
+    }
+  }
+
   // ----------------------------------------------------------
   // RIBRIK POUSE ATIS (RPA)
   // ----------------------------------------------------------

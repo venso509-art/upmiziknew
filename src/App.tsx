@@ -252,26 +252,53 @@ export default function App() {
     return window.location.search.includes('admin_install_secret=upmizik_desk_clauvens_2026');
   });
 
+  // Lock body scroll when any modal is active to prevent page jump and maintain exact scroll position
+  useEffect(() => {
+    const isAnyModalOpen = Boolean(
+      musicToSupport ||
+      musicForComment ||
+      musicToShare ||
+      selectedArtistForProfile ||
+      showArtistAuth ||
+      showAdminAuth ||
+      showSecretInstaller
+    );
+    if (isAnyModalOpen) {
+      const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+      document.body.style.overflow = 'hidden';
+      if (scrollBarWidth > 0) {
+        document.body.style.paddingRight = `${scrollBarWidth}px`;
+      }
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+    };
+  }, [musicToSupport, musicForComment, musicToShare, selectedArtistForProfile, showArtistAuth, showAdminAuth, showSecretInstaller]);
+
   // Deteksyon mòd Aplikasyon Biwo UpMizik Admin Desk (Standalone Desktop App)
   const [isDesktopApp, setIsDesktopApp] = useState(() => {
     if (typeof window === 'undefined') return false;
     return Boolean(
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
-      window.location.search.includes('standalone=true') ||
-      window.location.search.includes('admin_mode=true')
+      window.matchMedia?.('(display-mode: standalone)')?.matches ||
+      (typeof window.navigator !== 'undefined' && (window.navigator as unknown as { standalone?: boolean })?.standalone === true) ||
+      window.location?.search?.includes('standalone=true') ||
+      window.location?.search?.includes('admin_mode=true')
     );
   });
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !window.matchMedia) return;
     const mediaQuery = window.matchMedia('(display-mode: standalone)');
     const updateMode = () => {
       const standalone = Boolean(
-        mediaQuery.matches ||
-        (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
-        window.location.search.includes('standalone=true') ||
-        window.location.search.includes('admin_mode=true')
+        mediaQuery?.matches ||
+        (typeof window.navigator !== 'undefined' && (window.navigator as unknown as { standalone?: boolean })?.standalone === true) ||
+        window.location?.search?.includes('standalone=true') ||
+        window.location?.search?.includes('admin_mode=true')
       );
       setIsDesktopApp(standalone);
     };
@@ -940,6 +967,10 @@ export default function App() {
           setArtists(StorageService.getArtists());
           setRecRefreshKey(prev => prev + 1);
           addToast('info', `🎧 +1 Ekout valide pou "${currentTrack.title}"!`);
+
+          // Sync stream count to Hostinger MySQL so auto-polling doesn't overwrite it
+          UpMizikAPI.incrementPlayCount(currentTrack.id).catch(() => {});
+          fetch(`/api/musics.php?action=listen&id=${encodeURIComponent(currentTrack.id)}`).catch(() => {});
         }
       }
     });
