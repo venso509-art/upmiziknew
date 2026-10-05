@@ -588,6 +588,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [tempRpa, setTempRpa] = useState<RpaItem[]>(rpaList);
   const [tempPubs, setTempPubs] = useState<PubItem[]>(pubs);
 
+  useEffect(() => {
+    if (rpaList && rpaList.length > 0) {
+      setTempRpa(rpaList);
+    }
+  }, [rpaList]);
+
+  useEffect(() => {
+    if (pubs && pubs.length > 0) {
+      setTempPubs(pubs);
+    }
+  }, [pubs]);
+
   // Reactive Storage & Custom Event Synchronization
   const [internalRefreshKey, setInternalRefreshKey] = useState<number>(0);
 
@@ -7626,21 +7638,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             if (file) {
                               const isV = file.type.startsWith('video/') || file.name.endsWith('.mp4');
                               const isG = file.type === 'image/gif' || file.name.endsWith('.gif');
-                              let dataUrl = '';
+                              let previewUrl = '';
                               if (isV || isG) {
-                                const reader = new FileReader();
-                                dataUrl = await new Promise((res) => {
-                                  reader.onload = (ev) => res(ev.target?.result as string);
-                                  reader.readAsDataURL(file);
-                                });
+                                previewUrl = URL.createObjectURL(file);
                               } else {
-                                dataUrl = await compressAndReadFile(file, 800, 800, 0.72);
+                                previewUrl = await compressAndReadFile(file, 800, 800, 0.72);
                               }
                               const copy = [...tempRpa];
-                              copy[idx].mediaUrl = dataUrl;
-                              copy[idx].imageUrl = isV ? 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80' : dataUrl;
+                              copy[idx].mediaUrl = previewUrl;
+                              copy[idx].imageUrl = isV ? 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80' : previewUrl;
                               copy[idx].mediaType = isV ? 'video' : isG ? 'gif' : 'image';
-                              setTempRpa(copy);
+                              setTempRpa([...copy]);
+
+                              // Telechaje sou sèvè a dirèkteman pou URL pèmanan
+                              try {
+                                const upRes = await UpMizikAPI.uploadFile(file, isV ? 'media' : 'covers');
+                                if (upRes && upRes.url) {
+                                  const updatedCopy = [...tempRpa];
+                                  updatedCopy[idx].mediaUrl = upRes.url;
+                                  if (!isV) updatedCopy[idx].imageUrl = upRes.url;
+                                  setTempRpa(updatedCopy);
+                                }
+                              } catch (uploadErr) {
+                                console.warn('RPA media upload error:', uploadErr);
+                              }
                             }
                           }}
                         />
@@ -7992,21 +8013,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             if (file) {
                               const isV = file.type.startsWith('video/') || file.name.endsWith('.mp4');
                               const isG = file.type === 'image/gif' || file.name.endsWith('.gif');
-                              let dataUrl = '';
+                              let previewUrl = '';
                               if (isV || isG) {
-                                const reader = new FileReader();
-                                dataUrl = await new Promise((res) => {
-                                  reader.onload = (ev) => res(ev.target?.result as string);
-                                  reader.readAsDataURL(file);
-                                });
+                                previewUrl = URL.createObjectURL(file);
                               } else {
-                                dataUrl = await compressAndReadFile(file, 800, 800, 0.72);
+                                previewUrl = await compressAndReadFile(file, 800, 800, 0.72);
                               }
                               const copy = [...tempPubs];
-                              copy[idx].mediaUrl = dataUrl;
-                              copy[idx].imageUrl = isV ? 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=800&auto=format&fit=crop&q=80' : dataUrl;
+                              copy[idx].mediaUrl = previewUrl;
+                              copy[idx].imageUrl = isV ? 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=800&auto=format&fit=crop&q=80' : previewUrl;
                               copy[idx].mediaType = isV ? 'video' : isG ? 'gif' : 'image';
-                              setTempPubs(copy);
+                              setTempPubs([...copy]);
+
+                              // Telechaje sou sèvè a dirèkteman pou URL pèmanan
+                              try {
+                                const upRes = await UpMizikAPI.uploadFile(file, isV ? 'media' : 'covers');
+                                if (upRes && upRes.url) {
+                                  const updatedCopy = [...tempPubs];
+                                  updatedCopy[idx].mediaUrl = upRes.url;
+                                  if (!isV) updatedCopy[idx].imageUrl = upRes.url;
+                                  setTempPubs(updatedCopy);
+                                }
+                              } catch (uploadErr) {
+                                console.warn('Pub media upload error:', uploadErr);
+                              }
                             }
                           }}
                         />

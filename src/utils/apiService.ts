@@ -155,6 +155,34 @@ class ApiService {
     return this.registerArtist(artistData);
   }
 
+  /**
+   * Otorizasyon / Koneksyon Atis (Artist Authentication)
+   */
+  public async artistLogin(identifier: string, pin: string): Promise<{ success: boolean; artist?: ArtistUser; message?: string }> {
+    try {
+      const res = await fetchWithTimeout(`${this.baseUrl}/auth.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'artist_login',
+          identifier,
+          pin
+        })
+      }, 5000);
+      const data = await res.json();
+      return {
+        success: !!data.success,
+        artist: data.artist || data.data?.artist || data.user,
+        message: data.message
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err?.message || 'Erè koneksyon ak sèvè a'
+      };
+    }
+  }
+
   public async validateArtist(artistId: string, accept: boolean, reason?: string): Promise<boolean> {
     try {
       const res = await fetch(`${this.baseUrl}/artists.php`, {

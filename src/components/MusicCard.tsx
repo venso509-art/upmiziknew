@@ -26,6 +26,7 @@ import { getBadgeByDonations } from '../utils/badgeSystem';
 import { offlineManager } from '../utils/offlineManager';
 import { StorageService } from '../utils/storage';
 import { FloatingHearts, createHeartBurst, FloatingHeartParticle } from './FloatingHearts';
+import { resolveMediaUrl, DEFAULT_SONG_COVER } from '../utils/imageUtils';
 
 interface MusicCardProps {
   music: MusicItem;
@@ -147,12 +148,12 @@ export const MusicCard: React.FC<MusicCardProps> = ({
       {/* Cover Image & Category Badge Container */}
       <div className="relative aspect-square w-full overflow-hidden bg-black">
         <img
-          src={music.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80'}
+          src={resolveMediaUrl(music.coverUrl, DEFAULT_SONG_COVER)}
           alt={music.title}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           loading="lazy"
           onError={(e) => {
-            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80';
+            (e.target as HTMLImageElement).src = DEFAULT_SONG_COVER;
           }}
         />
 

@@ -4,6 +4,7 @@ import { MusicItem } from '../types';
 import { ArtistBadge } from './ArtistBadge';
 import { getBadgeByDonations } from '../utils/badgeSystem';
 import { FloatingHearts, createHeartBurst, FloatingHeartParticle } from './FloatingHearts';
+import { resolveMediaUrl, DEFAULT_SONG_COVER } from '../utils/imageUtils';
 
 interface TopTrendingProps {
   topMusic: MusicItem[];
@@ -150,11 +151,11 @@ export const TopTrending: React.FC<TopTrendingProps> = ({
                   <div className="flex items-center gap-4 my-2">
                     <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden shrink-0 border border-white/[0.1] shadow-xl bg-black">
                       <img
-                        src={music.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80'}
+                        src={resolveMediaUrl(music.coverUrl, DEFAULT_SONG_COVER)}
                         alt={music.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80';
+                          (e.target as HTMLImageElement).src = DEFAULT_SONG_COVER;
                         }}
                       />
                       <button

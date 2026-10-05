@@ -27,8 +27,27 @@
   ],
   "musics": [],
   "donations": [],
-  "rpa": [],
-  "pubs": [],
+  "rpa": [
+    {
+      "artistName": "Ti Peterson Mizik",
+      "songTitle": "Gouyad Papiyon",
+      "imageUrl": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800",
+      "badgeText": "Pouse Semèn Sa",
+      "youtubeUrl": "https://youtube.com/@tipetersonmizik",
+      "id": "rpa_1791199527374"
+    }
+  ],
+  "pubs": [
+    {
+      "title": "UpMizik Patnè Ofisyèl",
+      "description": "Sipòte kilti mizik ayisyen an sou pi gwo platfòm difizyon an.",
+      "imageUrl": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800",
+      "linkUrl": "https://upmizik.com",
+      "active": true,
+      "sponsorName": "UpMizik Patnè",
+      "id": "pub_1791199522343"
+    }
+  ],
   "socialPosts": [],
   "settings": {
     "artistRegistrationFeeUsd": 4.99,

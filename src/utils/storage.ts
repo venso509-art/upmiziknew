@@ -428,7 +428,15 @@ export const StorageService = {
         updated.coverUrl = resolveMediaUrl(updated.coverUrl, 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80');
       }
       if (updated.audioUrl) {
-        updated.audioUrl = resolveMediaUrl(updated.audioUrl);
+        let cleanAudio = updated.audioUrl.trim();
+        if (cleanAudio.includes('idb:')) {
+          cleanAudio = cleanAudio.substring(cleanAudio.indexOf('idb:'));
+        }
+        if (cleanAudio.startsWith('idb:') || cleanAudio.startsWith('blob:') || cleanAudio.startsWith('data:')) {
+          updated.audioUrl = cleanAudio;
+        } else {
+          updated.audioUrl = resolveMediaUrl(cleanAudio, '');
+        }
       }
       return updated;
     });

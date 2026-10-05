@@ -18,6 +18,7 @@ import { HostingerService } from './utils/hostingerService';
 import { UpMizikAPI } from './utils/apiService';
 import { INITIAL_ARTISTS } from './data/initialData';
 import { globalSoundEngine } from './utils/audioEngine';
+import { resolveMediaUrl, DEFAULT_SONG_COVER } from './utils/imageUtils';
 
 // Components
 import { Header } from './components/Header';
@@ -462,12 +463,7 @@ export default function App() {
     const savedArtist = StorageService.getLoggedInArtist();
     if (savedArtist) {
       const freshArtist = localArtists.find(a => a.id === savedArtist.id) || savedArtist;
-      if (freshArtist.status === 'active') {
-        setCurrentArtist(freshArtist);
-      } else {
-        StorageService.setLoggedInArtist(null);
-        setCurrentArtist(null);
-      }
+      setCurrentArtist(freshArtist);
     }
 
     const savedAdmin = StorageService.getLoggedInAdmin();
@@ -543,6 +539,13 @@ export default function App() {
           }
           setArtists(merged);
           StorageService.saveArtists(merged);
+          if (savedArtist) {
+            const updatedLive = merged.find(a => a.id === savedArtist.id);
+            if (updatedLive) {
+              setCurrentArtist(updatedLive);
+              StorageService.setLoggedInArtist(updatedLive);
+            }
+          }
         } else if (localArtists.length > 0) {
           HostingerService.syncArtists(localArtists);
         }
@@ -588,11 +591,21 @@ export default function App() {
         if (cloudRpa && cloudRpa.length > 0) {
           setRpaList(cloudRpa);
           StorageService.saveRpa(cloudRpa);
+        } else {
+          const curRpa = StorageService.getRpa();
+          if (curRpa && curRpa.length > 0) {
+            HostingerService.syncRpa(curRpa);
+          }
         }
 
         if (cloudPubs && cloudPubs.length > 0) {
           setPubs(cloudPubs);
           StorageService.savePubs(cloudPubs);
+        } else {
+          const curPubs = StorageService.getPubs();
+          if (curPubs && curPubs.length > 0) {
+            HostingerService.syncPubs(curPubs);
+          }
         }
 
         if (cloudSettings && typeof cloudSettings === 'object' && Array.isArray(cloudSettings.methods)) {
@@ -1021,10 +1034,12 @@ export default function App() {
       setPlaybackProgress(0);
 
       // Note: Tracks are only downloaded/cached offline upon explicit user choice via the download button or offline playlist manager
-
-      globalSoundEngine.loadTrack(music.id, music.audioUrl, music.title, music.category, music.duration);
-      globalSoundEngine.play();
       setIsPlaying(true);
+      globalSoundEngine.loadTrack(music, undefined, undefined, undefined, undefined, true).then(() => {
+        globalSoundEngine.play();
+      }).catch(() => {
+        globalSoundEngine.play();
+      });
     }
   };
 
@@ -1319,15 +1334,37 @@ export default function App() {
 
   // Add Music Handler (Artist & Admin)
   const handleAddNewSong = async (songData: Omit<MusicItem, 'id' | 'listens' | 'totalDonations' | 'createdAt'>) => {
+    // Asire coverUrl ak audioUrl transmèt kòrèkteman avèk bon fallback
+    const rawCover = songData.coverUrl || (songData as any).cover || (songData as any).cover_url || (songData as any).imageUrl;
+    const cleanCoverUrl = resolveMediaUrl(rawCover, DEFAULT_SONG_COVER);
+
+    console.log('[handleAddNewSong] Capturing and verifying coverUrl:', {
+      passedCover: songData.coverUrl,
+      rawCover,
+      resolvedCoverUrl: cleanCoverUrl,
+      songTitle: songData.title
+    });
+
+    const rawAudio = songData.audioUrl || (songData as any).audio_url || (songData as any).audio;
+    const cleanAudioUrl = rawAudio && typeof rawAudio === 'string'
+      ? rawAudio.trim()
+      : '';
+
     const newSong: MusicItem = {
       ...songData,
-      id: `music-${Date.now()}`,
-      listens: 0,
-      totalDonations: 0,
+      id: (songData as any).id || `music-${Date.now()}`,
+      title: songData.title?.trim() || 'Mizik UpMizik',
+      artistName: songData.artistName?.trim() || 'Atis UpMizik',
+      category: songData.category || 'Kompa',
+      coverUrl: cleanCoverUrl,
+      audioUrl: cleanAudioUrl,
+      duration: songData.duration && songData.duration > 0 ? songData.duration : 180,
+      listens: (songData as any).listens || 0,
+      totalDonations: (songData as any).totalDonations || 0,
       status: songData.status || 'active',
-      createdAt: new Date().toISOString().split('T')[0],
-      commentsCount: 0,
-      sharesCount: 0
+      createdAt: (songData as any).createdAt || new Date().toISOString().split('T')[0],
+      commentsCount: (songData as any).commentsCount || 0,
+      sharesCount: (songData as any).sharesCount || 0
     };
 
     // 1. Mete ajou lokalman imedyatman pou itilizatè k ap poste a wè moso a touswit san reta
@@ -1369,25 +1406,36 @@ export default function App() {
 
   // Admin & Artist Actions
   const handleSaveMusicItem = async (song: MusicItem) => {
-    StorageService.saveMusic(song);
+    const rawCover = song.coverUrl || (song as any).cover || (song as any).cover_url || (song as any).imageUrl;
+    const cleanCoverUrl = rawCover && typeof rawCover === 'string' && rawCover.trim().length > 0
+      ? resolveMediaUrl(rawCover.trim(), DEFAULT_SONG_COVER)
+      : DEFAULT_SONG_COVER;
+
+    const cleanSong: MusicItem = {
+      ...song,
+      coverUrl: cleanCoverUrl,
+      audioUrl: song.audioUrl ? song.audioUrl.trim() : ''
+    };
+
+    StorageService.saveMusic(cleanSong);
     const updatedList = StorageService.getMusic();
     setMusicList(updatedList);
     setArtists(StorageService.getArtists());
     setRecRefreshKey(prev => prev + 1);
 
     // If the edited song is currently loaded in the player, update its data live
-    if (currentTrack && currentTrack.id === song.id) {
-      setCurrentTrack(song);
-      if (currentTrack.audioUrl !== song.audioUrl && isPlaying) {
-        globalSoundEngine.loadTrack(song.id, song.audioUrl, song.title, song.category, song.duration);
+    if (currentTrack && currentTrack.id === cleanSong.id) {
+      setCurrentTrack(cleanSong);
+      if (currentTrack.audioUrl !== cleanSong.audioUrl && isPlaying) {
+        globalSoundEngine.loadTrack(cleanSong, undefined, undefined, undefined, undefined, true);
         globalSoundEngine.play();
       }
     }
-    addToast('success', `Moso mizik "${song.title}" anrejistre avèk siksè!`);
+    addToast('success', `Moso mizik "${cleanSong.title}" anrejistre avèk siksè!`);
 
     try {
-      await HostingerService.saveSingleMusic(song);
-      await UpMizikAPI.addMusic(song);
+      await HostingerService.saveSingleMusic(cleanSong);
+      await UpMizikAPI.addMusic(cleanSong);
       setTimeout(() => {
         HostingerService.fetchMusicAndNotify(true).catch(() => {});
       }, 300);
@@ -2031,7 +2079,7 @@ export default function App() {
         )}
 
         {/* ARTIST DASHBOARD VIEW */}
-        {currentView === 'artist_dashboard' && currentArtist && currentArtist.status === 'active' && (
+        {currentView === 'artist_dashboard' && currentArtist && (
           <ArtistDashboard
             currentArtist={currentArtist}
             artistSongs={currentArtistSongs}

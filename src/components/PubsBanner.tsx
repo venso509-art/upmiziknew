@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { PubItem } from '../types';
 import { Megaphone, ExternalLink, Sparkles, VolumeX, Film, ChevronLeft, ChevronRight } from 'lucide-react';
+import { resolveMediaUrl } from '../utils/imageUtils';
 
 interface PubsBannerProps {
   pubs: PubItem[];
@@ -11,7 +12,7 @@ export const PubsBanner: React.FC<PubsBannerProps> = ({ pubs }) => {
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
 
-  const activePubs = pubs.filter(p => p.active);
+  const activePubs = (pubs || []).filter(p => p.active !== false);
   const displayedPubs = activePubs.slice(0, 3);
 
   const checkScroll = () => {
@@ -60,9 +61,10 @@ export const PubsBanner: React.FC<PubsBannerProps> = ({ pubs }) => {
   if (!activePubs || activePubs.length === 0) return null;
 
   const renderPubMedia = (pub: PubItem) => {
-    const mediaSource = pub.mediaUrl || pub.imageUrl || '';
-    const isVideo = pub.mediaType === 'video' || mediaSource.endsWith('.mp4') || mediaSource.startsWith('data:video');
-    const isGif = pub.mediaType === 'gif' || mediaSource.toLowerCase().includes('.gif');
+    const rawMedia = pub.mediaUrl || pub.imageUrl || '';
+    const mediaSource = resolveMediaUrl(rawMedia);
+    const isVideo = pub.mediaType === 'video' || rawMedia.endsWith('.mp4') || rawMedia.startsWith('data:video');
+    const isGif = pub.mediaType === 'gif' || rawMedia.toLowerCase().includes('.gif');
 
     return (
       <div className="h-36 sm:h-40 w-full relative overflow-hidden bg-black group/media">

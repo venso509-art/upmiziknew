@@ -16,6 +16,7 @@ import { MusicItem } from '../types';
 import { StorageService } from '../utils/storage';
 import { ArtistBadge } from './ArtistBadge';
 import { FloatingHearts, createHeartBurst, FloatingHeartParticle } from './FloatingHearts';
+import { resolveMediaUrl, DEFAULT_SONG_COVER } from '../utils/imageUtils';
 
 interface RecommendedSectionProps {
   musicList: MusicItem[];
@@ -192,14 +193,14 @@ export const RecommendedSection: React.FC<RecommendedSectionProps> = ({
                 {/* Artwork with quick play hover */}
                 <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden shrink-0 bg-slate-900 border border-white/[0.08] group-hover:border-cyan-500/40 transition-colors">
                   <img
-                    src={music.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80'}
+                    src={resolveMediaUrl(music.coverUrl, DEFAULT_SONG_COVER)}
                     alt={music.title}
                     className={`w-full h-full object-cover transition-transform duration-500 ${
                       isThisPlaying ? 'scale-105' : 'group-hover:scale-105'
                     }`}
                     referrerPolicy="no-referrer"
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80';
+                      (e.target as HTMLImageElement).src = DEFAULT_SONG_COVER;
                     }}
                   />
 

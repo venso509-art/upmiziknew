@@ -94,36 +94,82 @@ export function handleImageError(
  * Utility to safely normalize image/avatar/cover/proof URLs and prevent
  * `Failed to load resource: net::ERR_FAILED` caused by Mixed Content (HTTP vs HTTPS),
  * missing path segments, or raw filenames.
+ *
+ * Always returns a non-null, valid URL or an offline SVG fallback image path.
  */
 export function resolveMediaUrl(
   url?: string | null,
-  fallback = DEFAULT_ARTIST_AVATAR
+  fallback = DEFAULT_SONG_COVER
 ): string {
-  if (!url || typeof url !== 'string' || !url.trim()) {
-    return fallback;
+  const safeFallback = fallback && typeof fallback === 'string' && fallback.trim().length > 0
+    ? fallback.trim()
+    : DEFAULT_SONG_COVER;
+
+  if (
+    !url ||
+    typeof url !== 'string' ||
+    !url.trim() ||
+    url.trim() === 'null' ||
+    url.trim() === 'undefined' ||
+    url.trim() === 'NaN' ||
+    url.trim() === '[object Object]'
+  ) {
+    return safeFallback;
   }
 
-  const clean = url.trim();
+  let clean = url.trim();
 
-  // 1. Data URLs & Blob URLs are already self-contained
-  if (clean.startsWith('data:') || clean.startsWith('blob:')) {
+  // If corrupted by previous general/idb: bug, restore idb: prefix
+  if (clean.includes('idb:')) {
+    clean = clean.substring(clean.indexOf('idb:'));
+  }
+
+  // Reject malicious / dangerous schemes
+  const lower = clean.toLowerCase();
+  if (lower.startsWith('javascript:') || lower.startsWith('vbscript:') || lower.startsWith('file:')) {
+    return safeFallback;
+  }
+
+  // 1. Data URLs, Blob URLs & IndexedDB keys are already self-contained
+  if (clean.startsWith('data:') || clean.startsWith('blob:') || clean.startsWith('idb:')) {
+    // Basic check for truncated or malformed data: URI
+    if (clean.startsWith('data:') && clean.length < 15) {
+      return safeFallback;
+    }
     return clean;
   }
 
-  // 2. Prevent Mixed Content (HTTP on HTTPS site)
-  // If site is running over HTTPS, any http://upmizik.com link will fail with net::ERR_FAILED
-  let normalized = clean;
+  // 2. Prevent Mixed Content & Normalize local dev server URLs
+  let normalized = clean.replace(/\\/g, '/');
+
+  // Check for malformed protocol like http:/ or https:/ without double slashes
+  if (/^https?:[^\/]/i.test(normalized) || /^https?:\/[^\/]/i.test(normalized)) {
+    return safeFallback;
+  }
+
+  if (normalized.startsWith('http://localhost:3000/backend/uploads/') || normalized.startsWith('http://localhost:3000/uploads/')) {
+    if (typeof window !== 'undefined' && window.location.origin !== 'http://localhost:3000') {
+      normalized = normalized.replace('http://localhost:3000', '');
+    }
+  }
+
   if (normalized.startsWith('http://upmizik.com') || normalized.startsWith('http://www.upmizik.com')) {
     normalized = normalized.replace('http://', 'https://');
   } else if (typeof window !== 'undefined' && window.location.protocol === 'https:' && normalized.startsWith('http://')) {
-    // If it's an external HTTP URL on an HTTPS page, upgrade or keep safe
     if (normalized.includes('images.unsplash.com') || normalized.includes('dicebear.com')) {
       normalized = normalized.replace('http://', 'https://');
     }
   }
 
-  // 3. Raw filenames without folder paths (e.g. "avatar_1789679229_a4d8db2b.jpeg")
+  // 3. Raw filenames without folder paths (e.g. "avatar_1789679229_a4d8db2b.jpeg" or "cover_123.jpg")
   if (!normalized.startsWith('http://') && !normalized.startsWith('https://') && !normalized.startsWith('/')) {
+    // If it's a raw string without extension or recognized folder prefix, treat as malformed
+    if (!normalized.includes('.') && !normalized.includes('/')) {
+      if (!normalized.startsWith('avatar') && !normalized.startsWith('cover') && !normalized.startsWith('proof') && !normalized.startsWith('music')) {
+        return safeFallback;
+      }
+    }
+
     if (normalized.startsWith('avatar_') || normalized.startsWith('avatars_')) {
       return `/backend/uploads/avatars/${normalized}`;
     }
@@ -133,7 +179,7 @@ export function resolveMediaUrl(
     if (normalized.startsWith('proof_') || normalized.startsWith('proofs_')) {
       return `/backend/uploads/proofs/${normalized}`;
     }
-    if (normalized.startsWith('music_') || normalized.endsWith('.mp3') || normalized.endsWith('.wav')) {
+    if (normalized.startsWith('music_') || normalized.endsWith('.mp3') || normalized.endsWith('.wav') || normalized.endsWith('.m4a') || normalized.endsWith('.ogg')) {
       return `/backend/uploads/music/${normalized}`;
     }
     return `/backend/uploads/general/${normalized}`;
@@ -147,6 +193,6 @@ export function resolveMediaUrl(
     return `/backend${normalized}`;
   }
 
-  return normalized;
+  return (normalized && normalized.trim().length > 0) ? normalized : safeFallback;
 }
 

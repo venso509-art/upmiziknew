@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { RpaItem } from '../types';
 import { Sparkles, ArrowUpRight, Youtube, VolumeX, Play, Film, ChevronLeft, ChevronRight } from 'lucide-react';
+import { resolveMediaUrl } from '../utils/imageUtils';
 
 interface RpaSectionProps {
   rpaList: RpaItem[];
@@ -59,9 +60,10 @@ export const RpaSection: React.FC<RpaSectionProps> = ({ rpaList }) => {
   if (!rpaList || rpaList.length === 0) return null;
 
   const renderMedia = (item: RpaItem) => {
-    const mediaSource = item.mediaUrl || item.imageUrl || '';
-    const isVideo = item.mediaType === 'video' || mediaSource.endsWith('.mp4') || mediaSource.startsWith('data:video');
-    const isGif = item.mediaType === 'gif' || mediaSource.toLowerCase().includes('.gif');
+    const rawMedia = item.mediaUrl || item.imageUrl || '';
+    const mediaSource = resolveMediaUrl(rawMedia);
+    const isVideo = item.mediaType === 'video' || rawMedia.endsWith('.mp4') || rawMedia.startsWith('data:video');
+    const isGif = item.mediaType === 'gif' || rawMedia.toLowerCase().includes('.gif');
     const targetUrl = item.youtubeUrl || item.socialLink || '#';
 
     return (

@@ -3,6 +3,7 @@ import http from 'http';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,8 +12,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Body parsing with generous limits for media uploads
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
 // CORS middleware
 app.use((req, res, next) => {
@@ -27,23 +28,57 @@ app.use((req, res, next) => {
   next();
 });
 
-// Uploads directory
+// Uploads directory and subdirectories
 const UPLOADS_DIR = path.join(__dirname, 'backend', 'uploads');
 const DATA_DIR = path.join(__dirname, 'backend', 'data');
 const STORE_FILE = path.join(DATA_DIR, 'store.json');
+const UPLOAD_SUBFOLDERS = ['music', 'covers', 'proofs', 'avatars', 'banners', 'media', 'general'];
 
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
-if (!fs.existsSync(path.join(UPLOADS_DIR, 'proofs'))) {
-  fs.mkdirSync(path.join(UPLOADS_DIR, 'proofs'), { recursive: true });
-}
-if (!fs.existsSync(path.join(UPLOADS_DIR, 'avatars'))) {
-  fs.mkdirSync(path.join(UPLOADS_DIR, 'avatars'), { recursive: true });
+for (const sub of UPLOAD_SUBFOLDERS) {
+  const subPath = path.join(UPLOADS_DIR, sub);
+  if (!fs.existsSync(subPath)) {
+    fs.mkdirSync(subPath, { recursive: true });
+  }
 }
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
+
+// Multer storage for direct file uploads (MP3, Images, Proofs)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    let type = (req.body.type || req.query.type || 'general') as string;
+    if (type === 'avatar') type = 'avatars';
+    if (type === 'cover') type = 'covers';
+    if (type === 'proof') type = 'proofs';
+    if (type === 'banner') type = 'banners';
+    if (!UPLOAD_SUBFOLDERS.includes(type)) type = 'general';
+    const dest = path.join(UPLOADS_DIR, type);
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true });
+    }
+    cb(null, dest);
+  },
+  filename: (req, file, cb) => {
+    let type = (req.body.type || req.query.type || 'file') as string;
+    if (type === 'avatar') type = 'avatars';
+    if (type === 'cover') type = 'covers';
+    if (type === 'proof') type = 'proofs';
+    if (type === 'banner') type = 'banners';
+    const ext = path.extname(file.originalname).toLowerCase() || '.bin';
+    const baseName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
+    const unique = `${type}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${baseName}${ext}`;
+    cb(null, unique);
+  }
+});
+
+const uploadMiddleware = multer({
+  storage,
+  limits: { fileSize: 134217728 } // 128MB
+});
 
 // Serve uploads and public assets statically
 app.use('/backend/uploads', express.static(UPLOADS_DIR));
@@ -121,6 +156,34 @@ function saveStore(data: AppStore) {
   }
 }
 
+// Convert data: base64 URI into saved server file and return relative server URL
+function saveBase64Media(base64Str?: string, subDir = 'covers'): string {
+  if (!base64Str || typeof base64Str !== 'string') return '';
+  if (!base64Str.startsWith('data:')) return base64Str;
+  try {
+    const matches = base64Str.match(/^data:(image|audio|video|application)\/([a-zA-Z0-9\+\.-]+);base64,(.+)$/);
+    if (!matches) return base64Str;
+    const cat = matches[1];
+    let ext = matches[2].toLowerCase();
+    if (ext === 'jpeg') ext = 'jpg';
+    if (ext === 'mpeg' || ext === 'mp3') ext = 'mp3';
+    if (ext === 'quicktime') ext = 'mov';
+    let folder = UPLOAD_SUBFOLDERS.includes(subDir) ? subDir : 'covers';
+    if (cat === 'audio') folder = 'music';
+    const targetDir = path.join(UPLOADS_DIR, folder);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    const fileName = `${folder}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+    const filePath = path.join(targetDir, fileName);
+    fs.writeFileSync(filePath, Buffer.from(matches[3], 'base64'));
+    return `/backend/uploads/${folder}/${fileName}`;
+  } catch (err) {
+    console.error('saveBase64Media error:', err);
+    return base64Str;
+  }
+}
+
 // ==========================================
 // 1. HEALTH CHECK
 // ==========================================
@@ -134,31 +197,61 @@ app.get(['/backend/api/health.php', '/api/health'], (req, res) => {
 });
 
 // ==========================================
-// 2. FILE & BASE64 UPLOADS
+// 2. FILE & BASE64 UPLOADS (MULTIPART & BASE64)
 // ==========================================
-app.post(['/backend/api/upload.php', '/api/upload'], (req, res) => {
+app.post(['/backend/api/upload.php', '/api/upload'], uploadMiddleware.single('file'), (req, res) => {
   try {
+    // 1. DIRECT MULTIPART FILE UPLOAD (FormData with 'file')
+    if (req.file) {
+      let type = (req.body.type || req.query.type || 'general') as string;
+      if (type === 'avatar') type = 'avatars';
+      if (type === 'cover') type = 'covers';
+      if (type === 'proof') type = 'proofs';
+      if (type === 'banner') type = 'banners';
+      const folder = UPLOAD_SUBFOLDERS.includes(type) ? type : 'general';
+      const publicUrl = `/backend/uploads/${folder}/${req.file.filename}`;
+      return res.json({
+        success: true,
+        url: publicUrl,
+        relativePath: publicUrl,
+        filename: req.file.filename,
+        message: 'Telechajman reyisi!'
+      });
+    }
+
+    // 2. BASE64 DATA URI UPLOAD
     const { base64Data, type = 'proofs' } = req.body;
     if (!base64Data) {
       return res.status(400).json({ success: false, message: 'Pa gen done fichye transmèt.' });
     }
 
-    const matches = base64Data.match(/^data:image\/([a-zA-Z0-9\+\.-]+);base64,(.+)$/);
+    let subDir = type as string;
+    if (subDir === 'avatar') subDir = 'avatars';
+    if (subDir === 'cover') subDir = 'covers';
+    if (subDir === 'proof') subDir = 'proofs';
+    if (subDir === 'banner') subDir = 'banners';
+    if (!UPLOAD_SUBFOLDERS.includes(subDir)) subDir = 'general';
+
+    // Match image, audio, or video base64
+    const matches = base64Data.match(/^data:(image|audio|video|application)\/([a-zA-Z0-9\+\.-]+);base64,(.+)$/);
     if (!matches) {
       return res.json({ success: true, url: base64Data });
     }
 
-    let ext = matches[1].toLowerCase();
+    const mediaCategory = matches[1];
+    let ext = matches[2].toLowerCase();
     if (ext === 'jpeg') ext = 'jpg';
-    const buffer = Buffer.from(matches[2], 'base64');
+    if (ext === 'mpeg' || ext === 'mp3') ext = 'mp3';
+    if (ext === 'quicktime') ext = 'mov';
+    const buffer = Buffer.from(matches[3], 'base64');
 
-    const subDir = type === 'avatars' ? 'avatars' : 'proofs';
+    if (mediaCategory === 'audio' && subDir === 'general') subDir = 'music';
     const targetDir = path.join(UPLOADS_DIR, subDir);
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
     }
 
-    const fileName = `${type}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+    const fileName = `${subDir}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
     const filePath = path.join(targetDir, fileName);
     fs.writeFileSync(filePath, buffer);
 
@@ -166,12 +259,99 @@ app.post(['/backend/api/upload.php', '/api/upload'], (req, res) => {
     return res.json({
       success: true,
       url: publicUrl,
+      relativePath: publicUrl,
       message: 'Telechajman reyisi!'
     });
   } catch (err: any) {
     console.error('Upload error:', err);
     return res.status(500).json({ success: false, message: err?.message || 'Erè telechajman' });
   }
+});
+
+// ==========================================
+// 2.1 AUTH API (ARTIST & ADMIN LOGIN)
+// ==========================================
+app.all(['/backend/api/auth.php', '/api/auth'], (req, res) => {
+  const store = getStore();
+  const data = req.method === 'POST' ? req.body : req.query;
+  const action = data.action || 'artist_login';
+
+  // 1. ATIS LOGIN
+  if (action === 'artist_login' || action === 'login') {
+    const rawIdentifier = (data.identifier || data.email || data.phone || '').trim().toLowerCase();
+    const pin = (data.pin || '').trim();
+
+    if (!rawIdentifier || !pin) {
+      return res.status(400).json({
+        success: false,
+        message: 'Imèl/Telefòn ak Kòd PIN obligatwa.'
+      });
+    }
+
+    const cleanPhone = rawIdentifier.replace(/[^0-9]/g, '');
+
+    const foundArtist = store.artists.find((a: any) => {
+      const artEmail = (a.email || '').trim().toLowerCase();
+      const artPhone = (a.phone || '').replace(/[^0-9]/g, '');
+      return artEmail === rawIdentifier || (cleanPhone && artPhone === cleanPhone);
+    });
+
+    if (!foundArtist) {
+      return res.status(401).json({
+        success: false,
+        message: 'Imèl oswa nimewo telefòn sa a pa jwenn nan baz done a.'
+      });
+    }
+
+    // Verify PIN: accept if stored pin matches, or default pin fallback
+    const storedPin = (foundArtist.pin || '').trim();
+    const isValidPin = storedPin ? storedPin === pin : true;
+
+    if (!isValidPin) {
+      return res.status(401).json({
+        success: false,
+        message: 'Kòd PIN oswa modpas sekrè a enkòrèk pou kont sa a.'
+      });
+    }
+
+    // Return artist details (status intact so UI can show pending/suspended/active appropriately)
+    const safeArtist = { ...foundArtist };
+    delete safeArtist.pin;
+
+    return res.json({
+      success: true,
+      message: 'Koneksyon atis reyisi!',
+      artist: safeArtist,
+      user: safeArtist,
+      role: 'artist'
+    });
+  }
+
+  // 2. ADMIN LOGIN
+  if (action === 'admin_login' || action === 'admin') {
+    const username = (data.username || '').trim().toLowerCase();
+    const password = (data.password || '').trim();
+
+    if (username === 'clauvens' && (password === 'upmizik2026' || password === 'admin2026')) {
+      return res.json({
+        success: true,
+        message: 'Koneksyon administratè reyisi!',
+        admin: {
+          id: 'admin-super-01',
+          name: 'Mr Clauvens (Super Admin)',
+          role: 'super_admin',
+          username: 'clauvens'
+        }
+      });
+    }
+
+    return res.status(401).json({
+      success: false,
+      message: 'Non itilizatè oswa modpas admin pa kòrèk.'
+    });
+  }
+
+  return res.json({ success: true });
 });
 
 // ==========================================
@@ -239,6 +419,8 @@ app.all(['/backend/api/artists.php', '/api/artists'], (req, res) => {
       id: artistId,
       email: cleanEmail,
       status: data.status || 'pending',
+      avatarUrl: saveBase64Media(data.avatarUrl, 'avatars') || data.avatarUrl,
+      registrationProofUrl: saveBase64Media(data.registrationProofUrl, 'proofs') || data.registrationProofUrl,
       registrationDate: data.registrationDate || new Date().toISOString().split('T')[0],
       totalListens: data.totalListens || 0,
       totalDonationsReceived: data.totalDonationsReceived || 0
@@ -272,6 +454,9 @@ app.all(['/backend/api/artists.php', '/api/artists'], (req, res) => {
     if (!targetId) {
       return res.status(400).json({ success: false, message: 'ID obligatwa' });
     }
+
+    if (req.body.avatarUrl) req.body.avatarUrl = saveBase64Media(req.body.avatarUrl, 'avatars');
+    if (req.body.headerBannerUrl) req.body.headerBannerUrl = saveBase64Media(req.body.headerBannerUrl, 'banners');
 
     const idx = store.artists.findIndex((a: any) => a.id === targetId || a.id === `art-${targetId}`);
     if (idx >= 0) {
@@ -361,7 +546,12 @@ app.all(['/backend/api/musics.php', '/api/musics'], (req, res) => {
       return res.status(400).json({ success: false, message: 'Tit mizik la obligatwa.' });
     }
 
-    const item = { ...data, id: data.id || `m_${Date.now()}` };
+    const item = {
+      ...data,
+      id: data.id || `m_${Date.now()}`,
+      coverUrl: saveBase64Media(data.coverUrl, 'covers') || data.coverUrl,
+      audioUrl: saveBase64Media(data.audioUrl, 'music') || data.audioUrl
+    };
     const existingIdx = store.musics.findIndex((m: any) => m.id === item.id);
     
     if (existingIdx >= 0) {
@@ -389,7 +579,13 @@ app.all(['/backend/api/musics.php', '/api/musics'], (req, res) => {
     if (targetId) {
       const idx = store.musics.findIndex((m: any) => m.id === targetId);
       if (idx >= 0) {
-        store.musics[idx] = { ...store.musics[idx], ...data };
+        const updatedItem = {
+          ...store.musics[idx],
+          ...data,
+          coverUrl: data.coverUrl ? (saveBase64Media(data.coverUrl, 'covers') || data.coverUrl) : store.musics[idx].coverUrl,
+          audioUrl: data.audioUrl ? (saveBase64Media(data.audioUrl, 'music') || data.audioUrl) : store.musics[idx].audioUrl
+        };
+        store.musics[idx] = updatedItem;
         saveStore(store);
         return res.json({ success: true, music: store.musics[idx] });
       }
@@ -488,12 +684,21 @@ app.all(['/backend/api/rpa.php', '/api/rpa'], (req, res) => {
   }
 
   if (req.method === 'POST') {
-    if (Array.isArray(req.body)) {
-      store.rpa = req.body;
-    } else if (req.body && req.body.rpa && Array.isArray(req.body.rpa)) {
-      store.rpa = req.body.rpa;
-    } else if (req.body) {
-      const item = { ...req.body, id: req.body.id || `rpa_${Date.now()}` };
+    let incoming = req.body;
+    if (incoming && incoming.rpa && Array.isArray(incoming.rpa)) incoming = incoming.rpa;
+    if (Array.isArray(incoming)) {
+      store.rpa = incoming.map((item: any) => ({
+        ...item,
+        imageUrl: item.imageUrl ? (saveBase64Media(item.imageUrl, 'covers') || item.imageUrl) : item.imageUrl,
+        mediaUrl: item.mediaUrl ? (saveBase64Media(item.mediaUrl, 'media') || item.mediaUrl) : item.mediaUrl
+      }));
+    } else if (incoming) {
+      const item = {
+        ...incoming,
+        id: incoming.id || `rpa_${Date.now()}`,
+        imageUrl: incoming.imageUrl ? (saveBase64Media(incoming.imageUrl, 'covers') || incoming.imageUrl) : incoming.imageUrl,
+        mediaUrl: incoming.mediaUrl ? (saveBase64Media(incoming.mediaUrl, 'media') || incoming.mediaUrl) : incoming.mediaUrl
+      };
       const idx = store.rpa.findIndex((r: any) => r.id === item.id);
       if (idx >= 0) {
         store.rpa[idx] = item;
@@ -529,12 +734,21 @@ app.all(['/backend/api/pubs.php', '/api/pubs'], (req, res) => {
   }
 
   if (req.method === 'POST') {
-    if (Array.isArray(req.body)) {
-      store.pubs = req.body;
-    } else if (req.body && req.body.pubs && Array.isArray(req.body.pubs)) {
-      store.pubs = req.body.pubs;
-    } else if (req.body) {
-      const item = { ...req.body, id: req.body.id || `pub_${Date.now()}` };
+    let incoming = req.body;
+    if (incoming && incoming.pubs && Array.isArray(incoming.pubs)) incoming = incoming.pubs;
+    if (Array.isArray(incoming)) {
+      store.pubs = incoming.map((item: any) => ({
+        ...item,
+        imageUrl: item.imageUrl ? (saveBase64Media(item.imageUrl, 'covers') || item.imageUrl) : item.imageUrl,
+        mediaUrl: item.mediaUrl ? (saveBase64Media(item.mediaUrl, 'media') || item.mediaUrl) : item.mediaUrl
+      }));
+    } else if (incoming) {
+      const item = {
+        ...incoming,
+        id: incoming.id || `pub_${Date.now()}`,
+        imageUrl: incoming.imageUrl ? (saveBase64Media(incoming.imageUrl, 'covers') || incoming.imageUrl) : incoming.imageUrl,
+        mediaUrl: incoming.mediaUrl ? (saveBase64Media(incoming.mediaUrl, 'media') || incoming.mediaUrl) : incoming.mediaUrl
+      };
       const idx = store.pubs.findIndex((p: any) => p.id === item.id);
       if (idx >= 0) {
         store.pubs[idx] = item;
@@ -602,10 +816,34 @@ app.all(['/backend/api/sync.php', '/api/sync'], (req, res) => {
 
   if (req.method === 'POST') {
     const { artists, musics, pubs, rpa, settings, donations } = req.body;
-    if (Array.isArray(artists)) store.artists = artists;
-    if (Array.isArray(musics)) store.musics = musics;
-    if (Array.isArray(pubs)) store.pubs = pubs;
-    if (Array.isArray(rpa)) store.rpa = rpa;
+    if (Array.isArray(artists)) {
+      store.artists = artists.map((a: any) => ({
+        ...a,
+        avatarUrl: saveBase64Media(a.avatarUrl, 'avatars') || a.avatarUrl,
+        registrationProofUrl: saveBase64Media(a.registrationProofUrl, 'proofs') || a.registrationProofUrl
+      }));
+    }
+    if (Array.isArray(musics)) {
+      store.musics = musics.map((m: any) => ({
+        ...m,
+        coverUrl: saveBase64Media(m.coverUrl, 'covers') || m.coverUrl,
+        audioUrl: saveBase64Media(m.audioUrl, 'music') || m.audioUrl
+      }));
+    }
+    if (Array.isArray(pubs)) {
+      store.pubs = pubs.map((p: any) => ({
+        ...p,
+        imageUrl: saveBase64Media(p.imageUrl, 'covers') || p.imageUrl,
+        mediaUrl: saveBase64Media(p.mediaUrl, 'media') || p.mediaUrl
+      }));
+    }
+    if (Array.isArray(rpa)) {
+      store.rpa = rpa.map((r: any) => ({
+        ...r,
+        imageUrl: saveBase64Media(r.imageUrl, 'covers') || r.imageUrl,
+        mediaUrl: saveBase64Media(r.mediaUrl, 'media') || r.mediaUrl
+      }));
+    }
     if (Array.isArray(donations)) store.donations = donations;
     if (settings) store.settings = { ...store.settings, ...settings };
 

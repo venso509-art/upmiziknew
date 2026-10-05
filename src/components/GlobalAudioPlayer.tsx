@@ -17,6 +17,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { MusicItem } from '../types';
+import { resolveMediaUrl, DEFAULT_SONG_COVER } from '../utils/imageUtils';
 
 interface GlobalAudioPlayerProps {
   currentTrack: MusicItem | null;
@@ -124,11 +125,11 @@ export const GlobalAudioPlayer: React.FC<GlobalAudioPlayerProps> = ({
           <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0 max-w-[200px] sm:max-w-xs">
             <div className="relative w-11 h-11 sm:w-12 sm:h-12 rounded-2xl overflow-hidden shrink-0 border border-white/[0.12] bg-black shadow-lg">
               <img
-                src={currentTrack.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80'}
+                src={resolveMediaUrl(currentTrack.coverUrl, DEFAULT_SONG_COVER)}
                 alt={currentTrack.title}
                 className="w-full h-full object-cover"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80';
+                  (e.target as HTMLImageElement).src = DEFAULT_SONG_COVER;
                 }}
               />
               {isCachedOffline && (
