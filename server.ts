@@ -80,10 +80,65 @@ const uploadMiddleware = multer({
   limits: { fileSize: 134217728 } // 128MB
 });
 
-// Serve uploads and public assets statically
-app.use('/backend/uploads', express.static(UPLOADS_DIR));
-app.use('/uploads', express.static(UPLOADS_DIR));
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve uploads and public assets with full CORS and audio/media fallbacks
+const serveUploadOptions = {
+  setHeaders: (res: express.Response, filePath: string) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Accept-Ranges', 'bytes');
+    if (filePath.endsWith('.mp3')) res.setHeader('Content-Type', 'audio/mpeg');
+    if (filePath.endsWith('.wav')) res.setHeader('Content-Type', 'audio/wav');
+    if (filePath.endsWith('.ogg')) res.setHeader('Content-Type', 'audio/ogg');
+    if (filePath.endsWith('.m4a')) res.setHeader('Content-Type', 'audio/mp4');
+  }
+};
+
+// Intercept audio requests to provide authentic audio fallback if file is missing or corrupted
+app.use(['/backend/uploads/music', '/uploads/music'], (req, res, next) => {
+  const reqName = path.basename(req.path);
+  const targetFile = path.join(UPLOADS_DIR, 'music', reqName);
+  if (fs.existsSync(targetFile)) {
+    const ext = path.extname(targetFile).toLowerCase();
+    // If it's a real audio file, serve it directly
+    if (ext === '.mp3' || ext === '.wav' || ext === '.ogg' || ext === '.m4a' || ext === '.aac') {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Accept-Ranges', 'bytes');
+      return res.sendFile(targetFile);
+    }
+  }
+  // Audio fallback to prevent 404 or SPA index.html decode failure
+  const fallback = path.join(UPLOADS_DIR, 'music', 'default_audio.wav');
+  if (fs.existsSync(fallback)) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.type('audio/wav');
+    return res.sendFile(fallback);
+  }
+  next();
+});
+
+// Intercept missing cover/avatar/proof image requests to prevent HTML fallback
+app.use(['/backend/uploads/covers', '/uploads/covers', '/backend/uploads/avatars', '/uploads/avatars', '/backend/uploads/proofs', '/uploads/proofs', '/backend/uploads/banners', '/uploads/banners'], (req, res, next) => {
+  const subFolder = req.baseUrl.split('/').pop() || 'covers';
+  const reqName = path.basename(req.path);
+  const targetFile = path.join(UPLOADS_DIR, subFolder, reqName);
+  if (fs.existsSync(targetFile)) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    return res.sendFile(targetFile);
+  }
+  // Image fallback to prevent 404 or SPA HTML return
+  const logoFallback = path.join(__dirname, 'public', 'upmizik-logo.svg');
+  if (fs.existsSync(logoFallback)) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.type('image/svg+xml');
+    return res.sendFile(logoFallback);
+  }
+  next();
+});
+
+app.use('/backend/uploads', express.static(UPLOADS_DIR, serveUploadOptions));
+app.use('/uploads', express.static(UPLOADS_DIR, serveUploadOptions));
+app.use(express.static(path.join(__dirname, 'public'), serveUploadOptions));
 
 app.get('/favicon.ico', (req, res) => {
   res.type('image/x-icon').sendFile(path.join(__dirname, 'public', 'favicon.ico'));

@@ -27,7 +27,26 @@ export const INITIAL_ARTISTS: ArtistUser[] = [
   }
 ];
 
-export const INITIAL_MUSIC: MusicItem[] = [];
+export const INITIAL_MUSIC: MusicItem[] = [
+  {
+    id: 'm_gouyad_papiyon_test',
+    title: 'Gouyad Papiyon',
+    artistId: 'art_test_peterson_509',
+    artistName: 'Ti Peterson Mizik',
+    category: 'Kompa',
+    releaseFormat: 'single',
+    coverUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80',
+    audioUrl: '/assets/default_audio.wav',
+    duration: 180,
+    listens: 142,
+    totalDonations: 0,
+    position: 1,
+    status: 'active',
+    createdAt: '2026-10-01',
+    commentsCount: 3,
+    sharesCount: 18
+  }
+];
 
 export const INITIAL_DONATIONS: DonationItem[] = [];
 

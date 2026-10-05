@@ -130,8 +130,13 @@ export function resolveMediaUrl(
     return safeFallback;
   }
 
-  // 1. Data URLs, Blob URLs & IndexedDB keys are already self-contained
-  if (clean.startsWith('data:') || clean.startsWith('blob:') || clean.startsWith('idb:')) {
+  // 1. IndexedDB keys cannot be decoded directly by HTML <img> tags, return safeFallback
+  if (clean.startsWith('idb:')) {
+    return safeFallback;
+  }
+
+  // 2. Data URLs & Blob URLs are already self-contained
+  if (clean.startsWith('data:') || clean.startsWith('blob:')) {
     // Basic check for truncated or malformed data: URI
     if (clean.startsWith('data:') && clean.length < 15) {
       return safeFallback;

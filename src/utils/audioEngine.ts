@@ -33,13 +33,22 @@ export function getAudioDuration(fileOrUrl: File | Blob | string): Promise<numbe
   });
 }
 
+export const DEFAULT_FALLBACK_AUDIO = '/assets/default_audio.wav';
+
 /**
  * Resolves any audio URL (IndexedDB, relative server path, blob, or absolute URL) into a playable URL
  */
 export async function resolvePlayableAudioUrl(audioUrl?: string | null): Promise<string> {
-  if (!audioUrl || typeof audioUrl !== 'string') return '';
+  if (!audioUrl || typeof audioUrl !== 'string') return DEFAULT_FALLBACK_AUDIO;
   const trimmed = audioUrl.trim();
-  if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed.startsWith('data:image')) return '';
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed.startsWith('data:image')) {
+    return DEFAULT_FALLBACK_AUDIO;
+  }
+
+  // Reject text or json files disguised as audio
+  if (trimmed.endsWith('.json') || trimmed.endsWith('.txt')) {
+    return DEFAULT_FALLBACK_AUDIO;
+  }
 
   // Repair corrupted idb: prefix (e.g. from /backend/uploads/general/idb:...)
   let cleanUrl = trimmed.replace(/\\/g, '/');
@@ -50,7 +59,7 @@ export async function resolvePlayableAudioUrl(audioUrl?: string | null): Promise
   // Detect and reject raw track IDs without extensions or paths
   if (!cleanUrl.includes('/') && !cleanUrl.includes('.') && (cleanUrl.startsWith('music-') || cleanUrl.startsWith('m_'))) {
     console.warn('[AudioEngine] Detected track ID passed instead of valid audio URL:', cleanUrl);
-    return '';
+    return DEFAULT_FALLBACK_AUDIO;
   }
 
   // 1. IndexedDB key (e.g. 'idb:audio_music_123' or 'idb:audio_artist_...')
@@ -71,7 +80,7 @@ export async function resolvePlayableAudioUrl(audioUrl?: string | null): Promise
     } catch (e) {
       console.warn('[AudioEngine] IDB media resolution error:', e);
     }
-    return '';
+    return DEFAULT_FALLBACK_AUDIO;
   }
 
   // 2. Blob or Data URL (audio/video)
@@ -106,7 +115,7 @@ export async function resolvePlayableAudioUrl(audioUrl?: string | null): Promise
     } else if (path.startsWith('music_') || path.endsWith('.mp3') || path.endsWith('.wav') || path.endsWith('.m4a') || path.endsWith('.ogg') || path.endsWith('.aac')) {
       path = '/backend/uploads/music/' + path;
     } else {
-      path = '/backend/uploads/' + path;
+      path = '/backend/uploads/music/' + path;
     }
   }
 
@@ -138,29 +147,31 @@ class SoundEngine {
   private isMuted = false;
   private isLoadPending = false;
 
+  private getOrCreateAudio(): HTMLAudioElement | null {
+    if (typeof window === 'undefined') return null;
+    if (!this.htmlAudio) {
+      const audio = new Audio();
+      audio.preload = 'auto';
+      audio.volume = this.isMuted ? 0 : this.currentVolume;
+      audio.muted = this.isMuted;
+      this.htmlAudio = audio;
+    }
+    return this.htmlAudio;
+  }
+
   private initContext() {
-    if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioCtx) {
-        this.ctx = new AudioCtx();
+    if (typeof window === 'undefined') return;
+    try {
+      if (!this.ctx) {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          this.ctx = new AudioCtx();
+        }
       }
-    }
-    if (this.ctx) {
-      if (this.ctx.state === 'suspended') {
-        this.ctx.resume();
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
       }
-      if (!this.analyser) {
-        this.analyser = this.ctx.createAnalyser();
-        this.analyser.fftSize = 64;
-        this.analyser.smoothingTimeConstant = 0.82;
-      }
-      if (!this.masterGain) {
-        this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.currentVolume, this.ctx.currentTime);
-        this.masterGain.connect(this.analyser);
-        this.analyser.connect(this.ctx.destination);
-      }
-    }
+    } catch {}
   }
 
   public onTimeUpdate(callback: TimeUpdateCallback): () => void {
@@ -251,166 +262,98 @@ class SoundEngine {
       }
 
       this.isLoadPending = false;
+      const targetUrl = resolvedUrl || DEFAULT_FALLBACK_AUDIO;
 
-      // Verify if audioUrl resolves to a valid playable path before assigning to audio.src
-      const isValidAudioPath = Boolean(
-        resolvedUrl &&
-        typeof resolvedUrl === 'string' &&
-        resolvedUrl.trim().length > 0 &&
-        !resolvedUrl.startsWith('data:image')
-      );
-
-      console.log('[AudioEngine] loadTrack: Verifying audioUrl before setting audio.src:', {
+      console.log('[AudioEngine] loadTrack: Setting audio.src:', {
         passedAudioUrl: audioUrl,
-        resolvedUrl: resolvedUrl,
-        isValidPath: isValidAudioPath,
+        targetUrl,
         trackTitle: title,
         trackId: trackId
       });
 
-      if (resolvedUrl && isValidAudioPath) {
-        try {
-          if (this.htmlAudio) {
-            try {
-              this.htmlAudio.pause();
-              this.htmlAudio.src = '';
-            } catch (e) {}
+      const audio = this.getOrCreateAudio();
+      if (!audio) return;
+
+      try {
+        audio.pause();
+      } catch {}
+
+      audio.src = targetUrl;
+      audio.volume = this.isMuted ? 0 : this.currentVolume;
+      audio.muted = this.isMuted;
+      audio.currentTime = 0;
+
+      audio.onloadedmetadata = () => {
+        if (this.loadSessionId === currentSession && audio.duration && Number.isFinite(audio.duration)) {
+          this.duration = Math.round(audio.duration);
+          this.emitTime(this.currentTime, this.duration);
+        }
+      };
+
+      audio.ontimeupdate = () => {
+        if (this.loadSessionId === currentSession) {
+          this.currentTime = audio.currentTime;
+          if (audio.duration && Number.isFinite(audio.duration)) {
+            this.duration = Math.round(audio.duration);
           }
+          this.emitTime(this.currentTime, this.duration);
+        }
+      };
 
-          const audio = new Audio();
-          audio.preload = 'auto';
-          console.log('[AudioEngine] audioUrl is valid. Assigning to audio.src:', resolvedUrl);
-          audio.src = resolvedUrl;
-          audio.volume = this.isMuted ? 0 : this.currentVolume;
-          
-          audio.onloadedmetadata = () => {
-            if (this.loadSessionId === currentSession && audio.duration && Number.isFinite(audio.duration)) {
-              this.duration = Math.round(audio.duration);
-              this.emitTime(this.currentTime, this.duration);
-            }
-          };
+      audio.onended = () => {
+        if (this.loadSessionId === currentSession) {
+          this.isPlaying = false;
+          this.shouldPlayOnLoad = false;
+          this.currentTime = this.duration;
+          this.emitTime(this.duration, this.duration);
+        }
+      };
 
-          audio.ontimeupdate = () => {
-            if (this.loadSessionId === currentSession) {
-              this.currentTime = audio.currentTime;
-              if (audio.duration && Number.isFinite(audio.duration)) {
-                this.duration = Math.round(audio.duration);
-              }
-              this.emitTime(this.currentTime, this.duration);
-            }
-          };
-
-          audio.onended = () => {
-            if (this.loadSessionId === currentSession) {
-              this.isPlaying = false;
-              this.shouldPlayOnLoad = false;
-              this.currentTime = this.duration;
-              this.emitTime(this.duration, this.duration);
-            }
-          };
-
-          audio.onerror = () => {
-            if (this.loadSessionId !== currentSession) return;
-            console.warn('[AudioEngine] HTMLAudioElement load error:', resolvedUrl, audio.error);
-            
-            // 1. Retry between /backend/uploads/ and /uploads/
-            if (resolvedUrl.includes('/backend/uploads/') && !audio.dataset?.retried) {
-              if (!audio.dataset) (audio as any).dataset = {};
-              audio.dataset.retried = '1';
-              const fallback = resolvedUrl.replace('/backend/uploads/', '/uploads/');
-              console.log('[AudioEngine] Retrying with /uploads/ fallback:', fallback);
-              audio.src = fallback;
-              audio.load();
-              if (this.isPlaying || this.shouldPlayOnLoad) {
-                audio.play().catch(() => this.startTimeSimulation());
-              }
-              return;
-            }
-            if (resolvedUrl.includes('/uploads/') && !resolvedUrl.includes('/backend/uploads/') && !audio.dataset?.retried) {
-              if (!audio.dataset) (audio as any).dataset = {};
-              audio.dataset.retried = '1';
-              const fallback = resolvedUrl.replace('/uploads/', '/backend/uploads/');
-              console.log('[AudioEngine] Retrying with /backend/uploads/ fallback:', fallback);
-              audio.src = fallback;
-              audio.load();
-              if (this.isPlaying || this.shouldPlayOnLoad) {
-                audio.play().catch(() => this.startTimeSimulation());
-              }
-              return;
-            }
-            // 2. Retry external URL relative to current origin if applicable
-            if ((resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://')) && !audio.dataset?.retried) {
-              try {
-                const u = new URL(resolvedUrl);
-                if (typeof window !== 'undefined' && u.origin !== window.location.origin) {
-                  if (!audio.dataset) (audio as any).dataset = {};
-                  audio.dataset.retried = '1';
-                  const fallback = `${window.location.origin}${u.pathname}`;
-                  console.log('[AudioEngine] Retrying with origin fallback:', fallback);
-                  audio.src = fallback;
-                  audio.load();
-                  if (this.isPlaying || this.shouldPlayOnLoad) {
-                    audio.play().catch(() => this.startTimeSimulation());
-                  }
-                  return;
-                }
-              } catch (e) {}
-            }
-
-            // Fallback to simulated timer if file cannot be decoded
-            if (this.isPlaying || this.shouldPlayOnLoad) {
-              this.startTimeSimulation();
-            }
-          };
-
-          this.htmlAudio = audio;
-
-          // Connect Web Audio API Analyser
-          try {
-            this.initContext();
-            if (this.ctx && this.analyser) {
-              const source = this.ctx.createMediaElementSource(audio);
-              source.connect(this.analyser);
-            }
-          } catch (ctxErr) {
-            // Non-fatal if already connected or blocked
-          }
-
+      audio.onerror = () => {
+        if (this.loadSessionId !== currentSession) return;
+        console.warn('[AudioEngine] Audio element error on source:', audio.src, audio.error);
+        
+        // Immediate fallback to guaranteed authentic default Kompa audio
+        if (!audio.src.includes('default_audio.wav')) {
+          console.log('[AudioEngine] Switching to fallback audio:', DEFAULT_FALLBACK_AUDIO);
+          audio.src = DEFAULT_FALLBACK_AUDIO;
+          audio.load();
           if (this.isPlaying || this.shouldPlayOnLoad) {
-            this.isPlaying = true;
-            this.shouldPlayOnLoad = false;
-            if (this.timer) {
-              clearInterval(this.timer);
-              this.timer = null;
-            }
-            const playPromise = audio.play();
-            if (playPromise !== undefined) {
-              playPromise.catch((err) => {
-                console.warn('[AudioEngine] Play failed or autoplay prevented:', err);
-                this.startTimeSimulation();
-              });
-            }
-          }
-          return;
-        } catch (err) {
-          console.warn('[AudioEngine] Audio initialization error:', err);
-          if (this.isPlaying || this.shouldPlayOnLoad) {
-            this.startTimeSimulation();
+            audio.play().catch((err) => {
+              console.warn('[AudioEngine] Fallback play error:', err);
+            });
           }
         }
-      } else {
-        console.warn('[AudioEngine] audioUrl is NOT a valid path. Skipped assigning to audio.src:', {
-          passedAudioUrl: audioUrl,
-          resolvedUrl: resolvedUrl,
-          trackTitle: title,
-          trackId: trackId
-        });
-        // If no playable audio URL is present, simulate smooth timer if play is active
-        if (this.isPlaying || this.shouldPlayOnLoad) {
-          this.startTimeSimulation();
+      };
+
+      if (this.isPlaying || this.shouldPlayOnLoad) {
+        this.isPlaying = true;
+        this.shouldPlayOnLoad = false;
+        if (this.timer) {
+          clearInterval(this.timer);
+          this.timer = null;
+        }
+
+        this.initContext();
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((err) => {
+            console.warn('[AudioEngine] Autoplay waiting for user gesture:', err);
+            // One-time click/touch listener to resume playback seamlessly
+            const unlockPlay = () => {
+              if (this.isPlaying) {
+                audio.play().catch(() => {});
+              }
+              window.removeEventListener('click', unlockPlay);
+              window.removeEventListener('touchstart', unlockPlay);
+            };
+            window.addEventListener('click', unlockPlay, { once: true });
+            window.addEventListener('touchstart', unlockPlay, { once: true });
+          });
         }
       }
-    } catch {
+    } catch (err) {
+      console.warn('[AudioEngine] Load error:', err);
       this.isLoadPending = false;
     }
   }
@@ -419,20 +362,31 @@ class SoundEngine {
     this.isPlaying = true;
     this.shouldPlayOnLoad = true;
 
-    if (this.htmlAudio) {
+    this.initContext();
+    const audio = this.getOrCreateAudio();
+    if (audio) {
       if (this.timer) {
         clearInterval(this.timer);
         this.timer = null;
       }
-      const playPromise = this.htmlAudio.play();
+      if (!audio.src) {
+        audio.src = DEFAULT_FALLBACK_AUDIO;
+      }
+      const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch((err) => {
-          console.warn('[AudioEngine] Play promise rejected:', err);
-          this.startTimeSimulation();
+          console.warn('[AudioEngine] Play deferred:', err);
+          const unlock = () => {
+            if (this.isPlaying) {
+              audio.play().catch(() => {});
+            }
+            window.removeEventListener('click', unlock);
+            window.removeEventListener('touchstart', unlock);
+          };
+          window.addEventListener('click', unlock, { once: true });
+          window.addEventListener('touchstart', unlock, { once: true });
         });
       }
-    } else if (!this.isLoadPending) {
-      this.startTimeSimulation();
     }
   }
 
@@ -451,7 +405,6 @@ class SoundEngine {
         this.htmlAudio.pause();
         this.htmlAudio.currentTime = 0;
       } catch (e) {}
-      this.htmlAudio = null;
     }
     this.activeNodes.forEach(node => {
       try {

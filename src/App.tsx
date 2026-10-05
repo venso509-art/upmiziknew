@@ -17,7 +17,7 @@ import { StorageService } from './utils/storage';
 import { HostingerService } from './utils/hostingerService';
 import { UpMizikAPI } from './utils/apiService';
 import { INITIAL_ARTISTS } from './data/initialData';
-import { globalSoundEngine } from './utils/audioEngine';
+import { globalSoundEngine, DEFAULT_FALLBACK_AUDIO } from './utils/audioEngine';
 import { resolveMediaUrl, DEFAULT_SONG_COVER } from './utils/imageUtils';
 
 // Components
@@ -1346,9 +1346,9 @@ export default function App() {
     });
 
     const rawAudio = songData.audioUrl || (songData as any).audio_url || (songData as any).audio;
-    const cleanAudioUrl = rawAudio && typeof rawAudio === 'string'
+    const cleanAudioUrl = rawAudio && typeof rawAudio === 'string' && rawAudio.trim().length > 0
       ? rawAudio.trim()
-      : '';
+      : DEFAULT_FALLBACK_AUDIO;
 
     const newSong: MusicItem = {
       ...songData,
@@ -1414,7 +1414,7 @@ export default function App() {
     const cleanSong: MusicItem = {
       ...song,
       coverUrl: cleanCoverUrl,
-      audioUrl: song.audioUrl ? song.audioUrl.trim() : ''
+      audioUrl: song.audioUrl && song.audioUrl.trim().length > 0 ? song.audioUrl.trim() : DEFAULT_FALLBACK_AUDIO
     };
 
     StorageService.saveMusic(cleanSong);
