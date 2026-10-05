@@ -85,6 +85,9 @@ app.use('/backend/uploads', express.static(UPLOADS_DIR));
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.get('/favicon.ico', (req, res) => {
+  res.type('image/x-icon').sendFile(path.join(__dirname, 'public', 'favicon.ico'));
+});
 app.get('/robots.txt', (req, res) => {
   res.type('text/plain').sendFile(path.join(__dirname, 'public', 'robots.txt'));
 });
